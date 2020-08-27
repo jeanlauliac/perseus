@@ -1,9 +1,31 @@
-function component() {
-  const element = document.createElement("div");
+import {
+  render,
+  useString,
+  useArray,
+  div,
+  input,
+  button,
+} from "./perseus/index";
 
-  element.innerHTML = "hello, world";
+const App = () => {
+  const text = useString("world");
+  const tasks = useArray();
 
-  return element;
-}
+  return div(
+    div("hello, ", text.value),
+    input({
+      value: text.value,
+      onChange: text.set,
+    }),
+    button(
+      {
+        onPress: () => {
+          tasks.add();
+        },
+      },
+      "Add task"
+    )
+  );
+};
 
-document.body.appendChild(component());
+render(document.body, App());
