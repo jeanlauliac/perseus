@@ -69,6 +69,9 @@ export const render = (parentElement: HTMLElement, element: Element) => {
       element.value.links.push({ type: "input_value", element: el });
       el.oninput = () => {
         element.onChange(el.value);
+        if (element.value.value !== el.value) {
+          el.value = element.value.value;
+        }
       };
       parentElement.appendChild(el);
       return;
