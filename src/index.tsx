@@ -6,13 +6,15 @@ import {
   input,
   button,
   Element,
-} from "./perseus/index";
+} from "perseus";
 
 const App = () => {
   const name = str("world");
   const tasks = array<Element>();
 
   let nid = 1;
+
+  const a = <div class="foo">foo bar {nid}</div>;
 
   return div(
     div("hello, ", name),
