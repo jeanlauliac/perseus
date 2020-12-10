@@ -1,6 +1,7 @@
-type Element =
+export type Element =
   | string
-  | Value
+  | Str
+  | Array<any>
   | {
       type: "html_element";
       tag: "div" | "span" | "input";
@@ -12,17 +13,14 @@ type Element =
 type StrLink =
   | { type: "input_value"; element: HTMLInputElement }
   | { type: "text_node"; node: Text };
-
 type Str = { type: "string"; value: string; links: StrLink[] };
 type MutStr = Str & {
   set: (_: string) => void;
 };
 
 type ArrLink = { type: "dom_element_range"; last: ChildNode };
-type ArrValue = { type: "array"; value: unknown[]; links: ArrLink[] };
-type Value = MutStr | ArrValue;
-
-type Arr<Elem> = { value: ArrValue; push: (e: Elem) => void };
+type Array<Elem> = { type: "array"; value: Elem[]; links: ArrLink[] };
+type MutArray<Elem> = Array<Elem> & { push: (e: Elem) => void };
 
 function exhaustive(_: never): void {
   throw new Error("invalid value");
@@ -106,7 +104,10 @@ export const render = (parentElement: Node, element: Element) => {
 
     case "array": {
       for (const item of element.value) {
-        if (typeof item == "object" && (item as ArrValue).type === "array") {
+        if (
+          typeof item == "object" &&
+          (item as Array<unknown>).type === "array"
+        ) {
           throw new Error("arrays cannot be nested");
         }
         render(parentElement, item as Element);
@@ -149,35 +150,35 @@ export const str = (initialValue: string): MutStr => {
   return ref;
 };
 
-export const useArray = <Elem>(): Arr<Elem> => {
-  const value: ArrValue = { type: "array", value: [], links: [] };
-  const push = (e: Elem) => {
-    value.value.push(e);
-    for (const link of value.links) {
-      switch (link.type) {
-        case "dom_element_range": {
-          const newChild = document.createDocumentFragment();
-          render(newChild, (e as unknown) as Element);
-          const beforeNode = link.last.nextSibling;
-          const parentNode = link.last.parentNode;
-          if (beforeNode != null) {
-            parentNode.insertBefore(newChild, beforeNode);
-            link.last = beforeNode.previousSibling;
-          } else {
-            parentNode.appendChild(newChild);
-            link.last = parentNode.lastChild;
+export const array = <Elem>(): MutArray<Elem> => {
+  const ref: MutArray<Elem> = {
+    type: "array",
+    value: [],
+    links: [],
+    push: (e: Elem) => {
+      ref.value.push(e);
+      for (const link of ref.links) {
+        switch (link.type) {
+          case "dom_element_range": {
+            const newChild = document.createDocumentFragment();
+            render(newChild, (e as unknown) as Element);
+            const beforeNode = link.last.nextSibling;
+            const parentNode = link.last.parentNode;
+            if (beforeNode != null) {
+              parentNode.insertBefore(newChild, beforeNode);
+              link.last = beforeNode.previousSibling;
+            } else {
+              parentNode.appendChild(newChild);
+              link.last = parentNode.lastChild;
+            }
+            break;
           }
-          break;
+
+          // default:
+          //   exhaustive(link);
         }
-
-        // default:
-        //   exhaustive(link);
       }
-    }
+    },
   };
-
-  return {
-    value,
-    push,
-  };
+  return ref;
 };

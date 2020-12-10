@@ -1,11 +1,22 @@
-import { render, str, useArray, div, input, button } from "./perseus/index";
+import {
+  render,
+  str,
+  array,
+  div,
+  input,
+  button,
+  Element,
+} from "./perseus/index";
 
 const App = () => {
   const name = str("world");
-  const tasks = useArray();
+  const tasks = array<Element>();
+
+  let nid = 1;
 
   return div(
     div("hello, ", name),
+    tasks,
     input({
       value: name,
       onChange: name.set,
@@ -13,13 +24,12 @@ const App = () => {
     button(
       {
         onPress: () => {
-          tasks.push(div(name.value));
+          tasks.push(div(nid + ". " + name.value));
+          ++nid;
         },
       },
       "Add task"
-    ),
-    tasks.value,
-    div("END")
+    )
   );
 };
 
