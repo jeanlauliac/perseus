@@ -1,30 +1,25 @@
-import {
-  render,
-  useString,
-  useArray,
-  div,
-  input,
-  button,
-} from "./perseus/index";
+import { render, str, useArray, div, input, button } from "./perseus/index";
 
 const App = () => {
-  const text = useString("world");
+  const name = str("world");
   const tasks = useArray();
 
   return div(
-    div("hello, ", text.value),
+    div("hello, ", name),
     input({
-      value: text.value,
-      onChange: text.set,
+      value: name,
+      onChange: name.set,
     }),
     button(
       {
         onPress: () => {
-          tasks.add();
+          tasks.push(div(name.value));
         },
       },
       "Add task"
-    )
+    ),
+    tasks.value,
+    div("END")
   );
 };
 

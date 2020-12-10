@@ -6,8 +6,23 @@ type Element =
       tag: "div" | "span" | "input";
       children: Element[];
     }
-  | { type: "input_element"; value: StrValue; onChange: (_: string) => void }
+  | { type: "input_element"; value: Str; onChange: (_: string) => void }
   | { type: "button_element"; onPress: () => void; children: Element[] };
+
+type StrLink =
+  | { type: "input_value"; element: HTMLInputElement }
+  | { type: "text_node"; node: Text };
+
+type Str = { type: "string"; value: string; links: StrLink[] };
+type MutStr = Str & {
+  set: (_: string) => void;
+};
+
+type ArrLink = { type: "dom_element_range"; last: ChildNode };
+type ArrValue = { type: "array"; value: unknown[]; links: ArrLink[] };
+type Value = MutStr | ArrValue;
+
+type Arr<Elem> = { value: ArrValue; push: (e: Elem) => void };
 
 function exhaustive(_: never): void {
   throw new Error("invalid value");
@@ -25,7 +40,7 @@ export const input = ({
   value,
   onChange,
 }: {
-  value: StrValue;
+  value: Str;
   onChange: (_: string) => void;
 }): Element => {
   return { type: "input_element", value, onChange };
@@ -40,7 +55,7 @@ export const button = (
   return { type: "button_element", onPress: props.onPress, children };
 };
 
-export const render = (parentElement: HTMLElement, element: Element) => {
+export const render = (parentElement: Node, element: Element) => {
   if (typeof element === "string") {
     parentElement.appendChild(document.createTextNode(element));
     return;
@@ -90,7 +105,15 @@ export const render = (parentElement: HTMLElement, element: Element) => {
     }
 
     case "array": {
-      throw new Error("cannot render array as part of the tree");
+      for (const item of element.value) {
+        if (typeof item == "object" && (item as ArrValue).type === "array") {
+          throw new Error("arrays cannot be nested");
+        }
+        render(parentElement, item as Element);
+      }
+      const { lastChild } = parentElement;
+      element.links.push({ type: "dom_element_range", last: lastChild });
+      return;
     }
 
     default:
@@ -98,40 +121,63 @@ export const render = (parentElement: HTMLElement, element: Element) => {
   }
 };
 
-type Link =
-  | { type: "input_value"; element: HTMLInputElement }
-  | { type: "text_node"; node: Text };
-type StrValue = { type: "string"; value: string; links: Link[] };
-type ArrValue = { type: "array"; value: []; links: Link[] };
-type Value = StrValue | ArrValue;
+export const str = (initialValue: string): MutStr => {
+  const ref: MutStr = {
+    type: "string",
+    value: initialValue,
+    links: [],
+    set: (newValue: string) => {
+      ref.value = newValue;
+      for (const link of ref.links) {
+        switch (link.type) {
+          case "input_value": {
+            link.element.value = newValue;
+            break;
+          }
 
-type Str = { value: StrValue; set: (_: string) => void };
-type Arr = { value: ArrValue; add: () => void };
+          case "text_node": {
+            link.node.data = newValue;
+            break;
+          }
 
-export const useString = (initialValue: string): Str => {
-  const value: StrValue = { type: "string", value: initialValue, links: [] };
-  const set = (newValue: string) => {
-    value.value = newValue;
+          default:
+            exhaustive(link);
+        }
+      }
+    },
+  };
+  return ref;
+};
+
+export const useArray = <Elem>(): Arr<Elem> => {
+  const value: ArrValue = { type: "array", value: [], links: [] };
+  const push = (e: Elem) => {
+    value.value.push(e);
     for (const link of value.links) {
       switch (link.type) {
-        case "input_value": {
-          link.element.value = newValue;
+        case "dom_element_range": {
+          const newChild = document.createDocumentFragment();
+          render(newChild, (e as unknown) as Element);
+          const beforeNode = link.last.nextSibling;
+          const parentNode = link.last.parentNode;
+          if (beforeNode != null) {
+            parentNode.insertBefore(newChild, beforeNode);
+            link.last = beforeNode.previousSibling;
+          } else {
+            parentNode.appendChild(newChild);
+            link.last = parentNode.lastChild;
+          }
           break;
         }
 
-        case "text_node": {
-          link.node.data = newValue;
-          break;
-        }
-
-        default:
-          exhaustive(link);
+        // default:
+        //   exhaustive(link);
       }
     }
   };
-  return { value, set };
-};
 
-export const useArray = (): Arr => {
-  return { value: { type: "array", value: [], links: [] }, add: () => {} };
+  return {
+    value,
+    push,
+  };
 };
