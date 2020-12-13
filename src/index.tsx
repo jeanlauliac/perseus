@@ -1,21 +1,36 @@
-import { render, str, array, div, Element } from "./perseus/index";
+import {
+  render,
+  useStr,
+  useArray,
+  Element,
+  MutArray,
+  Str,
+} from "./perseus/index";
+
+const AddTaskButton = (props: { tasks: MutArray<Element>; name: Str }) => {
+  let nid = 1;
+
+  const onPress = () => props.tasks.push(nid++ + ". " + props.name.value);
+  return <button onPress={onPress}>Add task</button>;
+};
 
 const App = () => {
-  const name = str("world");
-  const tasks = array<Element>();
-
-  let nid = 1;
+  const name = useStr("world");
+  const tasks = useArray<Element>();
 
   return (
     <div>
       <div>hello, {name}</div>
-      {tasks}
+      {tasks.map((task) => (
+        <div>
+          {task}&nbsp;
+          <button onPress={() => name.set("not impl")}>delete</button>
+        </div>
+      ))}
       <input value={name} onChange={name.set} />
-      <button onPress={() => tasks.push(div(nid++ + ". " + name.value))}>
-        Add task
-      </button>
+      <AddTaskButton tasks={tasks} name={name} />
     </div>
   );
 };
 
-render(document.body, App());
+render(document.body, <App />);

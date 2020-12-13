@@ -22,6 +22,10 @@ export const jsxs = (
   props: { [key: string]: any; children: Element[] },
   key: unknown
 ): Element => {
+  if (typeof tag === "function") {
+    return tag(props, key);
+  }
+
   switch (tag) {
     case "div":
     case "span":
@@ -40,5 +44,8 @@ export const jsxs = (
         onPress: props.onPress,
         children: props.children,
       };
+
+    default:
+      throw new Error("unknown tag");
   }
 };

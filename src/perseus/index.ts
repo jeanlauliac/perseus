@@ -18,40 +18,25 @@ export type MutStr = Str & {
   set: (_: string) => void;
 };
 
-type ArrLink = { type: "dom_element_range"; last: ChildNode };
-export type Array<Elem> = { type: "array"; value: Elem[]; links: ArrLink[] };
+type ArrLink =
+  | { type: "dom_element_range"; last: ChildNode }
+  | {
+      type: "mapped_array";
+      mappedRef: Array<unknown>;
+      mapper: (e: unknown) => unknown;
+    };
+
+export type Array<Elem> = {
+  type: "array";
+  value: Elem[];
+  links: ArrLink[];
+  map<MappedElem>(mapper: (e: Elem) => MappedElem): Array<MappedElem>;
+};
 export type MutArray<Elem> = Array<Elem> & { push: (e: Elem) => void };
 
 function exhaustive(_: never): void {
   throw new Error("invalid value");
 }
-
-export const div = (...children: Element[]): Element => {
-  return { type: "html_element", tag: "div", children };
-};
-
-export const span = (...children: Element[]): Element => {
-  return { type: "html_element", tag: "span", children };
-};
-
-export const input = ({
-  value,
-  onChange,
-}: {
-  value: Str;
-  onChange: (_: string) => void;
-}): Element => {
-  return { type: "input_element", value, onChange };
-};
-
-export const button = (
-  props: {
-    onPress: () => void;
-  },
-  ...children: Element[]
-): Element => {
-  return { type: "button_element", onPress: props.onPress, children };
-};
 
 export const render = (parentElement: Node, element: Element) => {
   if (typeof element === "string") {
@@ -122,7 +107,7 @@ export const render = (parentElement: Node, element: Element) => {
   }
 };
 
-export const str = (initialValue: string): MutStr => {
+export const useStr = (initialValue: string): MutStr => {
   const ref: MutStr = {
     type: "string",
     value: initialValue,
@@ -150,18 +135,40 @@ export const str = (initialValue: string): MutStr => {
   return ref;
 };
 
-export const array = <Elem>(): MutArray<Elem> => {
+const mapArray = <Elem, MappedElem>(
+  ref: Array<Elem>,
+  mapper: (e: Elem) => MappedElem
+): Array<MappedElem> => {
+  const mappedRef: Array<MappedElem> = {
+    type: "array",
+    value: ref.value.map((e) => mapper(e)),
+    links: [] as ArrLink[],
+    map: (mapper) => mapArray(mappedRef, mapper),
+  };
+  ref.links.push({ type: "mapped_array", mappedRef, mapper });
+  return mappedRef;
+};
+
+export const useArray = <Elem>(): MutArray<Elem> => {
   const ref: MutArray<Elem> = {
     type: "array",
     value: [],
     links: [],
-    push: (e: Elem) => {
+    push(e: Elem) {
       ref.value.push(e);
+
+      const queue: [ArrLink, unknown][] = [];
       for (const link of ref.links) {
+        queue.push([link, e]);
+      }
+
+      while (queue.length > 0) {
+        const [link, elem] = queue.shift();
+
         switch (link.type) {
           case "dom_element_range": {
             const newChild = document.createDocumentFragment();
-            render(newChild, (e as unknown) as Element);
+            render(newChild, (elem as unknown) as Element);
             const beforeNode = link.last.nextSibling;
             const parentNode = link.last.parentNode;
             if (beforeNode != null) {
@@ -174,11 +181,22 @@ export const array = <Elem>(): MutArray<Elem> => {
             break;
           }
 
-          // default:
-          //   exhaustive(link);
+          case "mapped_array": {
+            const mappedElem = link.mapper(e);
+            link.mappedRef.value.push(mappedElem);
+            for (const mappedLink of link.mappedRef.links) {
+              queue.push([mappedLink, mappedElem]);
+            }
+            break;
+          }
+
+          default:
+            exhaustive(link);
         }
       }
     },
+
+    map: (mapper) => mapArray(ref, mapper),
   };
   return ref;
 };
