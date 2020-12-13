@@ -1,12 +1,4 @@
-import {
-  render,
-  str,
-  array,
-  div,
-  input,
-  button,
-  Element,
-} from "perseus";
+import { render, str, array, div, Element } from "./perseus/index";
 
 const App = () => {
   const name = str("world");
@@ -14,24 +6,15 @@ const App = () => {
 
   let nid = 1;
 
-  const a = <div class="foo">foo bar {nid}</div>;
-
-  return div(
-    div("hello, ", name),
-    tasks,
-    input({
-      value: name,
-      onChange: name.set,
-    }),
-    button(
-      {
-        onPress: () => {
-          tasks.push(div(nid + ". " + name.value));
-          ++nid;
-        },
-      },
-      "Add task"
-    )
+  return (
+    <div>
+      <div>hello, {name}</div>
+      {tasks}
+      <input value={name} onChange={name.set} />
+      <button onPress={() => tasks.push(div(nid++ + ". " + name.value))}>
+        Add task
+      </button>
+    </div>
   );
 };
 

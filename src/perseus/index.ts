@@ -4,7 +4,7 @@ export type Element =
   | Array<any>
   | {
       type: "html_element";
-      tag: "div" | "span" | "input";
+      tag: "div" | "span";
       children: Element[];
     }
   | { type: "input_element"; value: Str; onChange: (_: string) => void }
@@ -13,14 +13,14 @@ export type Element =
 type StrLink =
   | { type: "input_value"; element: HTMLInputElement }
   | { type: "text_node"; node: Text };
-type Str = { type: "string"; value: string; links: StrLink[] };
-type MutStr = Str & {
+export type Str = { type: "string"; value: string; links: StrLink[] };
+export type MutStr = Str & {
   set: (_: string) => void;
 };
 
 type ArrLink = { type: "dom_element_range"; last: ChildNode };
-type Array<Elem> = { type: "array"; value: Elem[]; links: ArrLink[] };
-type MutArray<Elem> = Array<Elem> & { push: (e: Elem) => void };
+export type Array<Elem> = { type: "array"; value: Elem[]; links: ArrLink[] };
+export type MutArray<Elem> = Array<Elem> & { push: (e: Elem) => void };
 
 function exhaustive(_: never): void {
   throw new Error("invalid value");
