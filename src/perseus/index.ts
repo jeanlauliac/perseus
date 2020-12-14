@@ -19,7 +19,7 @@ export type MutStr = Str & {
 };
 
 type ArrLink =
-  | { type: "dom_element_range"; last: ChildNode }
+  | { type: "dom_element_range"; anchor: Node; last: ChildNode }
   | {
       type: "mapped_array";
       mappedRef: Array<unknown>;
@@ -31,14 +31,22 @@ export type Array<Elem> = {
   value: Elem[];
   links: ArrLink[];
   map<MappedElem>(mapper: (e: Elem) => MappedElem): Array<MappedElem>;
+  indexOf(e: Elem): number;
 };
-export type MutArray<Elem> = Array<Elem> & { push: (e: Elem) => void };
+export type MutArray<Elem> = Array<Elem> & {
+  push: (e: Elem) => void;
+  splice: (start: number, count: number) => Elem[];
+};
 
 function exhaustive(_: never): void {
   throw new Error("invalid value");
 }
 
 export const render = (parentElement: Node, element: Element) => {
+  renderImpl(parentElement, element);
+};
+
+const renderImpl = (parentElement: Node, element: Element) => {
   if (typeof element === "string") {
     parentElement.appendChild(document.createTextNode(element));
     return;
@@ -88,6 +96,9 @@ export const render = (parentElement: Node, element: Element) => {
     }
 
     case "array": {
+      const anchor = document.createComment("array anchor");
+      parentElement.appendChild(anchor);
+
       for (const item of element.value) {
         if (
           typeof item == "object" &&
@@ -95,10 +106,15 @@ export const render = (parentElement: Node, element: Element) => {
         ) {
           throw new Error("arrays cannot be nested");
         }
-        render(parentElement, item as Element);
+        renderImpl(parentElement, item as Element);
       }
-      const { lastChild } = parentElement;
-      element.links.push({ type: "dom_element_range", last: lastChild });
+
+      const last = parentElement.lastChild;
+      element.links.push({
+        type: "dom_element_range",
+        anchor,
+        last,
+      });
       return;
     }
 
@@ -144,6 +160,7 @@ const mapArray = <Elem, MappedElem>(
     value: ref.value.map((e) => mapper(e)),
     links: [] as ArrLink[],
     map: (mapper) => mapArray(mappedRef, mapper),
+    indexOf: (e) => mappedRef.value.indexOf(e),
   };
   ref.links.push({ type: "mapped_array", mappedRef, mapper });
   return mappedRef;
@@ -196,7 +213,57 @@ export const useArray = <Elem>(): MutArray<Elem> => {
       }
     },
 
+    splice(start, deleteCount) {
+      const rest = ref.value.splice(start, deleteCount);
+
+      const queue: ArrLink[] = [];
+      for (const link of ref.links) {
+        queue.push(link);
+      }
+
+      while (queue.length > 0) {
+        const link = queue.shift();
+
+        switch (link.type) {
+          case "dom_element_range": {
+            let removedNode = link.anchor.nextSibling;
+            const parentNode = link.anchor.parentNode;
+
+            for (let i = 0; i < start; ++i) {
+              removedNode = removedNode.nextSibling;
+            }
+            for (let i = 0; i < deleteCount - 1; ++i) {
+              const next = removedNode.nextSibling;
+              parentNode.removeChild(removedNode);
+              removedNode = next;
+            }
+            if (deleteCount > 0) {
+              if (removedNode === link.last) {
+                link.last = removedNode.previousSibling;
+              }
+              parentNode.removeChild(removedNode);
+            }
+            break;
+          }
+
+          case "mapped_array": {
+            link.mappedRef.value.splice(start, deleteCount);
+            for (const mappedLink of link.mappedRef.links) {
+              queue.push(mappedLink);
+            }
+            break;
+          }
+
+          default:
+            exhaustive(link);
+        }
+      }
+
+      return rest;
+    },
+
     map: (mapper) => mapArray(ref, mapper),
+    indexOf: (e) => ref.value.indexOf(e),
   };
   return ref;
 };
