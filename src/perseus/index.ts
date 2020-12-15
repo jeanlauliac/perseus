@@ -1,22 +1,19 @@
 export type Element =
   | string
-  | Str
+  | Scalar<string>
   | Array<any>
   | {
       type: "html_element";
       tag: "div" | "span";
       children: Element[];
     }
-  | { type: "input_element"; value: Str; onChange: (_: string) => void }
+  | {
+      type: "input_element";
+      value: Scalar<string>;
+      onChange: (_: string) => void;
+      onKeyPress: (_: KeyboardEvent) => void;
+    }
   | { type: "button_element"; onPress: () => void; children: Element[] };
-
-type StrLink =
-  | { type: "input_value"; element: HTMLInputElement }
-  | { type: "text_node"; node: Text };
-export type Str = { type: "string"; value: string; links: StrLink[] };
-export type MutStr = Str & {
-  set: (_: string) => void;
-};
 
 type ArrLink =
   | { type: "dom_element_range"; anchor: Node; last: ChildNode }
@@ -62,7 +59,7 @@ const renderImpl = (parentElement: Node, element: Element) => {
       return;
     }
 
-    case "string": {
+    case "scalar": {
       const node = document.createTextNode(element.value);
       element.links.push({ type: "text_node", node });
       parentElement.appendChild(node);
@@ -74,11 +71,14 @@ const renderImpl = (parentElement: Node, element: Element) => {
       el.value = element.value.value;
       element.value.links.push({ type: "input_value", element: el });
       el.oninput = () => {
-        element.onChange(el.value);
+        element.onChange != null && element.onChange(el.value);
         if (element.value.value !== el.value) {
           el.value = element.value.value;
         }
       };
+      if (element.onKeyPress) {
+        el.onkeypress = element.onKeyPress;
+      }
       parentElement.appendChild(el);
       return;
     }
@@ -123,30 +123,89 @@ const renderImpl = (parentElement: Node, element: Element) => {
   }
 };
 
-export const useStr = (initialValue: string): MutStr => {
-  const ref: MutStr = {
-    type: "string",
+type ScalarValue = string | number | boolean;
+type ScalarLink =
+  | { type: "input_value"; element: HTMLInputElement }
+  | { type: "text_node"; node: Text }
+  | {
+      type: "mapped_value";
+      mapper: (_: unknown) => ScalarValue;
+      ref: Scalar<ScalarValue>;
+    };
+export type Scalar<Value extends ScalarValue> = {
+  type: "scalar";
+  value: Value;
+  links: ScalarLink[];
+  map: <MappedValue extends ScalarValue>(
+    mapper: (_: Value) => MappedValue
+  ) => Scalar<MappedValue>;
+};
+export type MutScalar<Value extends ScalarValue> = Scalar<Value> & {
+  set: (_: Value) => void;
+};
+
+export const useScalar = <Value extends ScalarValue>(
+  initialValue: Value
+): MutScalar<Value> => {
+  const set = <Value extends ScalarValue>(
+    ref: MutScalar<Value>,
+    newValue: Value
+  ) => {
+    ref.value = newValue;
+    const queue: [unknown, ScalarLink][] = ref.links.map((link) => [
+      newValue,
+      link,
+    ]);
+
+    while (queue.length > 0) {
+      const [newValue, link] = queue.shift();
+      switch (link.type) {
+        case "input_value": {
+          assert(typeof newValue === "string");
+          link.element.value = newValue;
+          break;
+        }
+
+        case "text_node": {
+          assert(typeof newValue === "string");
+          link.node.data = newValue;
+          break;
+        }
+
+        case "mapped_value": {
+          const mappedValue = (link.ref.value = link.mapper(ref.value));
+          for (const mappedLink of link.ref.links) {
+            queue.push([mappedValue, mappedLink]);
+          }
+          break;
+        }
+
+        default:
+          exhaustive(link);
+      }
+    }
+  };
+
+  const map = <Value extends ScalarValue, MappedValue extends ScalarValue>(
+    ref: Scalar<Value>,
+    mapper: (_: Value) => MappedValue
+  ) => {
+    const mappedRef: Scalar<MappedValue> = {
+      type: "scalar",
+      value: mapper(ref.value),
+      links: [],
+      map: (mapper) => map(mappedRef, mapper),
+    };
+    ref.links.push({ type: "mapped_value", mapper, ref: mappedRef });
+    return mappedRef;
+  };
+
+  const ref: MutScalar<Value> = {
+    type: "scalar",
     value: initialValue,
     links: [],
-    set: (newValue: string) => {
-      ref.value = newValue;
-      for (const link of ref.links) {
-        switch (link.type) {
-          case "input_value": {
-            link.element.value = newValue;
-            break;
-          }
-
-          case "text_node": {
-            link.node.data = newValue;
-            break;
-          }
-
-          default:
-            exhaustive(link);
-        }
-      }
-    },
+    set: (value) => set(ref, value),
+    map: (mapper) => map(ref, mapper),
   };
   return ref;
 };
@@ -267,3 +326,9 @@ export const useArray = <Elem>(): MutArray<Elem> => {
   };
   return ref;
 };
+
+function assert(cond: boolean): asserts cond {
+  if (!cond) {
+    throw new Error("failed assertion");
+  }
+}

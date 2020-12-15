@@ -36,6 +36,7 @@ export const jsxs = (
         type: "input_element",
         value: props.value,
         onChange: props.onChange,
+        onKeyPress: props.onKeyPress,
       };
 
     case "button":

@@ -1,38 +1,59 @@
 import {
   render,
-  useStr,
+  useScalar,
   useArray,
-  Element,
   MutArray,
-  Str,
+  Scalar,
+  MutScalar,
 } from "./perseus/index";
 
-type Task = { id: number; name: string };
+type Task = { id: number; name: string; isDone: MutScalar<boolean> };
 
-const AddTaskButton = (props: { tasks: MutArray<Task>; name: Str }) => {
-  let nid = 1;
-
-  const onPress = () => props.tasks.push({ id: nid++, name: props.name.value });
-  return <button onPress={onPress}>Add task</button>;
+const TaskRow = ({ task, onDelete }: { task: Task; onDelete: () => void }) => {
+  return (
+    <div>
+      {task.id.toString()}. {task.name}&nbsp;
+      <button onPress={() => onDelete()}>delete</button>
+      <button onPress={() => task.isDone.set(!task.isDone.value)}>
+        {task.isDone.map((value) => (value ? "done" : "NOT done"))}
+      </button>
+    </div>
+  );
 };
 
 const App = () => {
-  const name = useStr("world");
+  const name = useScalar<string>("world");
   const tasks = useArray<Task>();
+
+  let nid = 1;
+
+  const onPress = () => {
+    if (name.value === "") return;
+    tasks.push({
+      id: nid++,
+      name: name.value,
+      isDone: useScalar(false),
+    });
+    name.set("");
+  };
 
   return (
     <div>
       <div>hello, {name}</div>
       {tasks.map((task) => (
-        <div>
-          {task.id.toString()}. {task.name}&nbsp;
-          <button onPress={() => tasks.splice(tasks.indexOf(task), 1)}>
-            delete
-          </button>
-        </div>
+        <TaskRow
+          task={task}
+          onDelete={() => tasks.splice(tasks.indexOf(task), 1)}
+        />
       ))}
-      <input value={name} onChange={name.set} />
-      <AddTaskButton tasks={tasks} name={name} />
+      <input
+        value={name}
+        onChange={name.set}
+        onKeyPress={(e: KeyboardEvent) => {
+          if (e.key === "Enter") onPress();
+        }}
+      />
+      <button onPress={onPress}>Add task</button>
     </div>
   );
 };
