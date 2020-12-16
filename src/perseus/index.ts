@@ -15,26 +15,6 @@ export type Element =
     }
   | { type: "button_element"; onPress: () => void; children: Element[] };
 
-type ArrLink =
-  | { type: "dom_element_range"; anchor: Node; last: ChildNode }
-  | {
-      type: "mapped_array";
-      mappedRef: Array<unknown>;
-      mapper: (e: unknown) => unknown;
-    };
-
-export type Array<Elem> = {
-  type: "array";
-  value: Elem[];
-  links: ArrLink[];
-  map<MappedElem>(mapper: (e: Elem) => MappedElem): Array<MappedElem>;
-  indexOf(e: Elem): number;
-};
-export type MutArray<Elem> = Array<Elem> & {
-  push: (e: Elem) => void;
-  splice: (start: number, count: number) => Elem[];
-};
-
 function exhaustive(_: never): void {
   throw new Error("invalid value");
 }
@@ -208,6 +188,25 @@ export const useScalar = <Value extends ScalarValue>(
     map: (mapper) => map(ref, mapper),
   };
   return ref;
+};
+
+type ArrLink =
+  | { type: "dom_element_range"; anchor: Node; last: ChildNode }
+  | {
+      type: "mapped_array";
+      mappedRef: Array<unknown>;
+      mapper: (e: unknown) => unknown;
+    };
+export type Array<Elem> = {
+  type: "array";
+  value: Elem[];
+  links: ArrLink[];
+  map<MappedElem>(mapper: (e: Elem) => MappedElem): Array<MappedElem>;
+  indexOf(e: Elem): number;
+};
+export type MutArray<Elem> = Array<Elem> & {
+  push: (e: Elem) => void;
+  splice: (start: number, count: number) => Elem[];
 };
 
 const mapArray = <Elem, MappedElem>(

@@ -1,11 +1,4 @@
-import {
-  render,
-  useScalar,
-  useArray,
-  MutArray,
-  Scalar,
-  MutScalar,
-} from "./perseus/index";
+import { render, useScalar, useArray, MutScalar } from "./perseus/index";
 
 type Task = { id: number; name: string; isDone: MutScalar<boolean> };
 
