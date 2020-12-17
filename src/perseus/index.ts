@@ -203,6 +203,7 @@ export type Array<Elem> = {
   links: ArrLink[];
   map<MappedElem>(mapper: (e: Elem) => MappedElem): Array<MappedElem>;
   indexOf(e: Elem): number;
+  readonly length: Scalar<number>;
 };
 export type MutArray<Elem> = Array<Elem> & {
   push: (e: Elem) => void;
@@ -219,18 +220,21 @@ const mapArray = <Elem, MappedElem>(
     links: [] as ArrLink[],
     map: (mapper) => mapArray(mappedRef, mapper),
     indexOf: (e) => mappedRef.value.indexOf(e),
+    length: ref.length,
   };
   ref.links.push({ type: "mapped_array", mappedRef, mapper });
   return mappedRef;
 };
 
 export const useArray = <Elem>(): MutArray<Elem> => {
+  const length = useScalar<number>(0);
   const ref: MutArray<Elem> = {
     type: "array",
     value: [],
     links: [],
     push(e: Elem) {
       ref.value.push(e);
+      length.set(ref.value.length);
 
       const queue: [ArrLink, unknown][] = [];
       for (const link of ref.links) {
@@ -273,6 +277,7 @@ export const useArray = <Elem>(): MutArray<Elem> => {
 
     splice(start, deleteCount) {
       const rest = ref.value.splice(start, deleteCount);
+      length.set(ref.value.length);
 
       const queue: ArrLink[] = [];
       for (const link of ref.links) {
@@ -322,6 +327,7 @@ export const useArray = <Elem>(): MutArray<Elem> => {
 
     map: (mapper) => mapArray(ref, mapper),
     indexOf: (e) => ref.value.indexOf(e),
+    length,
   };
   return ref;
 };
