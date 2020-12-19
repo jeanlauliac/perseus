@@ -1,26 +1,41 @@
-import { render, useScalar, useArray, RxMutValue } from "./perseus/index";
+import { render, useValue, useArray, RxMutValue } from "./perseus/index";
 
 type Task = { id: number; name: string; isDone: RxMutValue<boolean> };
+
+const Spacer = () => {
+  return <div style={{ display: "inline-block", width: "10px" }} />;
+};
 
 const TaskRow = ({ task, onDelete }: { task: Task; onDelete: () => void }) => {
   const style = {
     textDecoration: task.isDone.map((value) => (value ? "line-through" : null)),
     color: task.isDone.map((value) => (value ? "#aaa" : null)),
+    flexGrow: "1",
   };
   return (
-    <div>
+    <div
+      style={{
+        display: "flex",
+        width: "400px",
+        margin: "10px 0 10px 0",
+      }}
+    >
       <span style={style}>{task.name}</span>
       &nbsp;
       <button onPress={onDelete}>delete</button>
-      <button onPress={() => task.isDone.set(!task.isDone.value)}>
-        {task.isDone.map((value) => (value ? "done" : "NOT done"))}
+      <Spacer />
+      <button
+        style={{ width: "120px" }}
+        onPress={() => task.isDone.set(!task.isDone.value)}
+      >
+        {task.isDone.map((value) => (value ? "restore" : "mark as done"))}
       </button>
     </div>
   );
 };
 
 const App = () => {
-  const name = useScalar<string>("world");
+  const name = useValue<string>("");
   const tasks = useArray<Task>();
 
   let nid = 1;
@@ -30,13 +45,13 @@ const App = () => {
     tasks.push({
       id: nid++,
       name: name.value,
-      isDone: useScalar(false),
+      isDone: useValue(false),
     });
     name.set("");
   };
 
   return (
-    <div>
+    <div style={{ fontSize: "26px" }}>
       <input
         value={name}
         onChange={(ev: InputEvent) =>
@@ -45,7 +60,9 @@ const App = () => {
         onKeyPress={(e: KeyboardEvent) => {
           if (e.key === "Enter") onPress();
         }}
+        placeholder="What needs to be done?"
       />
+      <Spacer />
       <button onPress={onPress}>Add task</button>
       {tasks.map((task) => (
         <TaskRow
