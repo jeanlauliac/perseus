@@ -3,16 +3,17 @@ import { render, useScalar, useArray, MutScalar } from "./perseus/index";
 type Task = { id: number; name: string; isDone: MutScalar<boolean> };
 
 const TaskRow = ({ task, onDelete }: { task: Task; onDelete: () => void }) => {
-  const textDecoration = task.isDone.map((value) =>
-    value ? "strikethrough" : undefined
-  );
+  const style = {
+    textDecoration: task.isDone.map((value) => (value ? "line-through" : null)),
+    color: task.isDone.map((value) => (value ? "#aaa" : null)),
+  };
   return (
     <div>
-      <span style={{ textDecoration }}>{task.name}</span>
+      <span style={style}>{task.name}</span>
       &nbsp;
       <button onPress={onDelete}>delete</button>
       <button onPress={() => task.isDone.set(!task.isDone.value)}>
-        {task.isDone.map((value) => (value ? "done 🎉" : "NOT done"))}
+        {task.isDone.map((value) => (value ? "done" : "NOT done"))}
       </button>
     </div>
   );
@@ -38,7 +39,9 @@ const App = () => {
     <div>
       <input
         value={name}
-        onChange={name.set}
+        onChange={(ev: InputEvent) =>
+          name.set((ev.target as HTMLInputElement).value)
+        }
         onKeyPress={(e: KeyboardEvent) => {
           if (e.key === "Enter") onPress();
         }}

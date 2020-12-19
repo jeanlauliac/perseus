@@ -4,16 +4,16 @@ export type Element =
   | Array<any>
   | {
       type: "html_element";
-      tag: "div" | "span";
-      children: Element[];
-    }
-  | {
-      type: "input_element";
-      value: Scalar<string>;
-      onChange: (_: string) => void;
-      onKeyPress: (_: KeyboardEvent) => void;
-    }
-  | { type: "button_element"; onPress: () => void; children: Element[] };
+      tag: string;
+      props: {
+        value?: Scalar<string>;
+        children?: Element[];
+        onChange?: (_: InputEvent) => void;
+        onPress?: (_: UIEvent) => void;
+        onKeyPress?: (_: KeyboardEvent) => void;
+        style: { [key: string]: Scalar<string> | string };
+      };
+    };
 
 function exhaustive(_: never): void {
   throw new Error("invalid value");
@@ -32,9 +32,41 @@ const renderImpl = (parentElement: Node, element: Element) => {
   switch (element.type) {
     case "html_element": {
       const el = document.createElement(element.tag);
-      for (const child of element.children) {
+      const { props } = element;
+
+      for (const child of props.children || []) {
         render(el, child);
       }
+
+      if (element.tag === "input") {
+        const input = el as HTMLInputElement;
+        if (props.value != null) {
+          input.value = props.value.value;
+          props.value.links.push({ type: "input_value", element: input });
+        }
+        input.oninput = (ev: InputEvent) => {
+          if (props.onChange != null) props.onChange(ev);
+          if (props.value.value !== input.value) {
+            input.value = props.value.value;
+          }
+        };
+        if (props.onKeyPress != null) {
+          input.onkeypress = props.onKeyPress;
+        }
+      }
+
+      if (props.onPress != null) el.onclick = props.onPress;
+
+      for (const styleName of Object.keys(props.style || {})) {
+        const value = props.style[styleName];
+        if (typeof value === "string") {
+          (el.style as any)[styleName] = value;
+          continue;
+        }
+        (el.style as any)[styleName] = value.value;
+        value.links.push({ type: "style_value", element: el, styleName });
+      }
+
       parentElement.appendChild(el);
       return;
     }
@@ -43,35 +75,6 @@ const renderImpl = (parentElement: Node, element: Element) => {
       const node = document.createTextNode(element.value);
       element.links.push({ type: "text_node", node });
       parentElement.appendChild(node);
-      return;
-    }
-
-    case "input_element": {
-      const el = document.createElement("input") as HTMLInputElement;
-      el.value = element.value.value;
-      element.value.links.push({ type: "input_value", element: el });
-      el.oninput = () => {
-        element.onChange != null && element.onChange(el.value);
-        if (element.value.value !== el.value) {
-          el.value = element.value.value;
-        }
-      };
-      if (element.onKeyPress) {
-        el.onkeypress = element.onKeyPress;
-      }
-      parentElement.appendChild(el);
-      return;
-    }
-
-    case "button_element": {
-      const el = document.createElement("button") as HTMLButtonElement;
-      for (const child of element.children) {
-        render(el, child);
-      }
-      el.onclick = () => {
-        element.onPress();
-      };
-      parentElement.appendChild(el);
       return;
     }
 
@@ -106,6 +109,7 @@ const renderImpl = (parentElement: Node, element: Element) => {
 type ScalarValue = string | number | boolean;
 type ScalarLink =
   | { type: "input_value"; element: HTMLInputElement }
+  | { type: "style_value"; element: HTMLElement; styleName: string }
   | { type: "text_node"; node: Text }
   | {
       type: "mapped_value";
@@ -138,17 +142,17 @@ export const useScalar = <Value extends ScalarValue>(
     ]);
 
     while (queue.length > 0) {
-      const [newValue, link] = queue.shift();
+      const [value, link] = queue.shift();
       switch (link.type) {
         case "input_value": {
-          assert(typeof newValue === "string");
-          link.element.value = newValue;
+          assert(typeof value === "string");
+          link.element.value = value;
           break;
         }
 
         case "text_node": {
-          assert(typeof newValue === "string");
-          link.node.data = newValue;
+          assert(typeof value === "string");
+          link.node.data = value;
           break;
         }
 
@@ -157,6 +161,16 @@ export const useScalar = <Value extends ScalarValue>(
           for (const mappedLink of link.ref.links) {
             queue.push([mappedValue, mappedLink]);
           }
+          break;
+        }
+
+        case "style_value": {
+          assert(typeof value === "string" || value == null);
+          if (value == null) {
+            (link.element.style as any)[link.styleName] = "";
+            break;
+          }
+          (link.element.style as any)[link.styleName] = value;
           break;
         }
 
