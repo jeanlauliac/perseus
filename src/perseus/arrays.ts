@@ -9,6 +9,7 @@ type ArrLink =
       mappedRef: RxArray<unknown>;
       mapper: (e: unknown) => unknown;
     };
+
 export type RxArray<Elem> = {
   type: "array";
   value: Elem[];
@@ -17,6 +18,7 @@ export type RxArray<Elem> = {
   indexOf(e: Elem): number;
   readonly length: RxValue<number>;
 };
+
 export type RxMutArray<Elem> = RxArray<Elem> & {
   push: (e: Elem) => void;
   splice: (start: number, count: number) => Elem[];
