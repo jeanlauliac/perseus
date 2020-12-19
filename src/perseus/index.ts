@@ -1,17 +1,17 @@
 export type Element =
   | string
-  | Scalar<string>
-  | Array<any>
+  | RxValue<string>
+  | RxArray<any>
   | {
       type: "html_element";
       tag: string;
       props: {
-        value?: Scalar<string>;
+        value?: RxValue<string>;
         children?: Element[];
         onChange?: (_: InputEvent) => void;
         onPress?: (_: UIEvent) => void;
         onKeyPress?: (_: KeyboardEvent) => void;
-        style: { [key: string]: Scalar<string> | string };
+        style: { [key: string]: RxValue<string> | string };
       };
     };
 
@@ -85,7 +85,7 @@ const renderImpl = (parentElement: Node, element: Element) => {
       for (const item of element.value) {
         if (
           typeof item == "object" &&
-          (item as Array<unknown>).type === "array"
+          (item as RxArray<unknown>).type === "array"
         ) {
           throw new Error("arrays cannot be nested");
         }
@@ -106,37 +106,29 @@ const renderImpl = (parentElement: Node, element: Element) => {
   }
 };
 
-type ScalarValue = string | number | boolean;
-type ScalarLink =
+type RxValueLink =
   | { type: "input_value"; element: HTMLInputElement }
   | { type: "style_value"; element: HTMLElement; styleName: string }
   | { type: "text_node"; node: Text }
   | {
       type: "mapped_value";
-      mapper: (_: unknown) => ScalarValue;
-      ref: Scalar<ScalarValue>;
+      mapper: (_: unknown) => unknown;
+      ref: RxValue<unknown>;
     };
-export type Scalar<Value extends ScalarValue> = {
+export type RxValue<Value> = {
   type: "scalar";
   value: Value;
-  links: ScalarLink[];
-  map: <MappedValue extends ScalarValue>(
-    mapper: (_: Value) => MappedValue
-  ) => Scalar<MappedValue>;
+  links: RxValueLink[];
+  map: <MappedValue>(mapper: (_: Value) => MappedValue) => RxValue<MappedValue>;
 };
-export type MutScalar<Value extends ScalarValue> = Scalar<Value> & {
+export type RxMutValue<Value> = RxValue<Value> & {
   set: (_: Value) => void;
 };
 
-export const useScalar = <Value extends ScalarValue>(
-  initialValue: Value
-): MutScalar<Value> => {
-  const set = <Value extends ScalarValue>(
-    ref: MutScalar<Value>,
-    newValue: Value
-  ) => {
+export const useScalar = <Value>(initialValue: Value): RxMutValue<Value> => {
+  const set = <Value>(ref: RxMutValue<Value>, newValue: Value) => {
     ref.value = newValue;
-    const queue: [unknown, ScalarLink][] = ref.links.map((link) => [
+    const queue: [unknown, RxValueLink][] = ref.links.map((link) => [
       newValue,
       link,
     ]);
@@ -180,11 +172,11 @@ export const useScalar = <Value extends ScalarValue>(
     }
   };
 
-  const map = <Value extends ScalarValue, MappedValue extends ScalarValue>(
-    ref: Scalar<Value>,
+  const map = <Value, MappedValue>(
+    ref: RxValue<Value>,
     mapper: (_: Value) => MappedValue
   ) => {
-    const mappedRef: Scalar<MappedValue> = {
+    const mappedRef: RxValue<MappedValue> = {
       type: "scalar",
       value: mapper(ref.value),
       links: [],
@@ -194,7 +186,7 @@ export const useScalar = <Value extends ScalarValue>(
     return mappedRef;
   };
 
-  const ref: MutScalar<Value> = {
+  const ref: RxMutValue<Value> = {
     type: "scalar",
     value: initialValue,
     links: [],
@@ -208,27 +200,27 @@ type ArrLink =
   | { type: "dom_element_range"; anchor: Node; last: ChildNode }
   | {
       type: "mapped_array";
-      mappedRef: Array<unknown>;
+      mappedRef: RxArray<unknown>;
       mapper: (e: unknown) => unknown;
     };
-export type Array<Elem> = {
+export type RxArray<Elem> = {
   type: "array";
   value: Elem[];
   links: ArrLink[];
-  map<MappedElem>(mapper: (e: Elem) => MappedElem): Array<MappedElem>;
+  map<MappedElem>(mapper: (e: Elem) => MappedElem): RxArray<MappedElem>;
   indexOf(e: Elem): number;
-  readonly length: Scalar<number>;
+  readonly length: RxValue<number>;
 };
-export type MutArray<Elem> = Array<Elem> & {
+export type RxMutArray<Elem> = RxArray<Elem> & {
   push: (e: Elem) => void;
   splice: (start: number, count: number) => Elem[];
 };
 
 const mapArray = <Elem, MappedElem>(
-  ref: Array<Elem>,
+  ref: RxArray<Elem>,
   mapper: (e: Elem) => MappedElem
-): Array<MappedElem> => {
-  const mappedRef: Array<MappedElem> = {
+): RxArray<MappedElem> => {
+  const mappedRef: RxArray<MappedElem> = {
     type: "array",
     value: ref.value.map((e) => mapper(e)),
     links: [] as ArrLink[],
@@ -240,9 +232,9 @@ const mapArray = <Elem, MappedElem>(
   return mappedRef;
 };
 
-export const useArray = <Elem>(): MutArray<Elem> => {
+export const useArray = <Elem>(): RxMutArray<Elem> => {
   const length = useScalar<number>(0);
-  const ref: MutArray<Elem> = {
+  const ref: RxMutArray<Elem> = {
     type: "array",
     value: [],
     links: [],

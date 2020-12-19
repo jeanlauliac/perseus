@@ -1,6 +1,6 @@
-import { render, useScalar, useArray, MutScalar } from "./perseus/index";
+import { render, useScalar, useArray, RxMutValue } from "./perseus/index";
 
-type Task = { id: number; name: string; isDone: MutScalar<boolean> };
+type Task = { id: number; name: string; isDone: RxMutValue<boolean> };
 
 const TaskRow = ({ task, onDelete }: { task: Task; onDelete: () => void }) => {
   const style = {
