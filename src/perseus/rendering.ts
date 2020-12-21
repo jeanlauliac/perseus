@@ -86,7 +86,7 @@ const renderImpl = (parentElement: Node, element: Element) => {
       const anchor = document.createComment("array anchor");
       parentElement.appendChild(anchor);
 
-      for (const item of element.value) {
+      for (const item of element.currentValue) {
         if (
           typeof item == "object" &&
           (item as RxArray<unknown>).type === "array"
@@ -97,7 +97,7 @@ const renderImpl = (parentElement: Node, element: Element) => {
       }
 
       const last = parentElement.lastChild;
-      element.links.push({
+      element.register({
         type: "dom_element_range",
         anchor,
         last,

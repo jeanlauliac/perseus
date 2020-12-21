@@ -1,147 +1,181 @@
 import { Element, render } from "./rendering";
 import { exhaustive } from "./utils";
-import { RxValue, useValue } from "./values";
+import { RxMutValue, RxValue, useValue } from "./values";
 
-type ArrLink =
+type RxMappedArrayNode = {
+  type: "mapped_array";
+  mapper: (e: unknown) => unknown;
+  value: unknown[];
+  dependees: RxArrayNode[];
+};
+
+type RxArrayNode =
   | { type: "dom_element_range"; anchor: Node; last: ChildNode }
-  | {
-      type: "mapped_array";
-      mappedRef: RxArray<unknown>;
-      mapper: (e: unknown) => unknown;
-    };
+  | RxMappedArrayNode;
 
-export type RxArray<Elem> = {
+export interface RxArray<Elem> {
   type: "array";
-  value: Elem[];
-  links: ArrLink[];
-  map<MappedElem>(mapper: (e: Elem) => MappedElem): RxArray<MappedElem>;
-  indexOf(e: Elem): number;
+  readonly currentValue: Elem[];
   readonly length: RxValue<number>;
-};
 
-export type RxMutArray<Elem> = RxArray<Elem> & {
-  push: (e: Elem) => void;
-  splice: (start: number, count: number) => Elem[];
-};
+  map<MappedElem>(mapper: (_: Elem) => MappedElem): RxArray<MappedElem>;
+  register(node: RxArrayNode): void;
+}
 
-const mapArray = <Elem, MappedElem>(
-  ref: RxArray<Elem>,
-  mapper: (e: Elem) => MappedElem
-): RxArray<MappedElem> => {
-  const mappedRef: RxArray<MappedElem> = {
-    type: "array",
-    value: ref.value.map((e) => mapper(e)),
-    links: [] as ArrLink[],
-    map: (mapper) => mapArray(mappedRef, mapper),
-    indexOf: (e) => mappedRef.value.indexOf(e),
-    length: ref.length,
-  };
-  ref.links.push({ type: "mapped_array", mappedRef, mapper });
-  return mappedRef;
-};
+class RxMappedArray<SourceElem, Elem> implements RxArray<Elem> {
+  type: "array" = "array";
+  private node?: RxMappedArrayNode;
+
+  constructor(
+    private source: RxArray<SourceElem>,
+    private mapper: (_: SourceElem) => Elem
+  ) {}
+
+  get length(): RxValue<number> {
+    return this.source.length;
+  }
+
+  get currentValue(): Elem[] {
+    if (this.node != null) return this.node.value as Elem[];
+    return this.source.currentValue.map(this.mapper);
+  }
+
+  map<MappedElem>(mapper: (_: Elem) => MappedElem): RxArray<MappedElem> {
+    return new RxMappedArray(this, mapper);
+  }
+
+  register(node: RxArrayNode): void {
+    if (this.node != null) {
+      this.node.dependees.push(node);
+    }
+    this.node = {
+      type: "mapped_array",
+      mapper: this.mapper,
+      value: this.currentValue,
+      dependees: [node],
+    };
+    this.source.register(this.node);
+  }
+}
+
+export class RxMutArray<Elem> implements RxArray<Elem> {
+  type: "array" = "array";
+  private value: Elem[] = [];
+  private _length: RxMutValue<number> = new RxMutValue(0);
+  private dependees: RxArrayNode[] = [];
+
+  RxMutArray() {}
+
+  get length() {
+    return this._length;
+  }
+
+  get currentValue() {
+    return this.value;
+  }
+
+  map<MappedElem>(mapper: (_: Elem) => MappedElem): RxArray<MappedElem> {
+    return new RxMappedArray(this, mapper);
+  }
+
+  register(node: RxArrayNode) {
+    this.dependees.push(node);
+  }
+
+  indexOf(e: Elem): number {
+    return this.value.indexOf(e);
+  }
+
+  push(e: Elem): void {
+    this.value.push(e);
+    this._length.set(this.value.length);
+
+    const queue: [RxArrayNode, unknown][] = [];
+    for (const node of this.dependees) {
+      queue.push([node, e]);
+    }
+
+    while (queue.length > 0) {
+      const [node, elem] = queue.shift();
+
+      switch (node.type) {
+        case "dom_element_range": {
+          const newChild = document.createDocumentFragment();
+          render(newChild, (elem as unknown) as Element);
+          const beforeNode = node.last.nextSibling;
+          const parentNode = node.last.parentNode;
+          if (beforeNode != null) {
+            parentNode.insertBefore(newChild, beforeNode);
+            node.last = beforeNode.previousSibling;
+          } else {
+            parentNode.appendChild(newChild);
+            node.last = parentNode.lastChild;
+          }
+          break;
+        }
+
+        case "mapped_array": {
+          const mappedElem = node.mapper(e);
+          node.value.push(mappedElem);
+          for (const mappedLink of node.dependees) {
+            queue.push([mappedLink, mappedElem]);
+          }
+          break;
+        }
+
+        default:
+          exhaustive(node);
+      }
+    }
+  }
+
+  splice(start: number, deleteCount: number): Elem[] {
+    const rest = this.value.splice(start, deleteCount);
+    this._length.set(this.value.length);
+
+    const queue: RxArrayNode[] = [...this.dependees];
+    while (queue.length > 0) {
+      const node = queue.shift();
+
+      switch (node.type) {
+        case "dom_element_range": {
+          let removedNode = node.anchor.nextSibling;
+          const parentNode = node.anchor.parentNode;
+
+          for (let i = 0; i < start; ++i) {
+            removedNode = removedNode.nextSibling;
+          }
+          for (let i = 0; i < deleteCount - 1; ++i) {
+            const next = removedNode.nextSibling;
+            parentNode.removeChild(removedNode);
+            removedNode = next;
+          }
+          if (deleteCount > 0) {
+            if (removedNode === node.last) {
+              node.last = removedNode.previousSibling;
+            }
+            parentNode.removeChild(removedNode);
+          }
+          break;
+        }
+
+        case "mapped_array": {
+          node.value.splice(start, deleteCount);
+          for (const mappedNode of node.dependees) {
+            queue.push(mappedNode);
+          }
+          break;
+        }
+
+        default:
+          exhaustive(node);
+      }
+    }
+
+    return rest;
+  }
+}
 
 export const useArray = <Elem>(): RxMutArray<Elem> => {
-  const length = useValue<number>(0);
-  const ref: RxMutArray<Elem> = {
-    type: "array",
-    value: [],
-    links: [],
-    push(e: Elem) {
-      ref.value.push(e);
-      length.set(ref.value.length);
-
-      const queue: [ArrLink, unknown][] = [];
-      for (const link of ref.links) {
-        queue.push([link, e]);
-      }
-
-      while (queue.length > 0) {
-        const [link, elem] = queue.shift();
-
-        switch (link.type) {
-          case "dom_element_range": {
-            const newChild = document.createDocumentFragment();
-            render(newChild, (elem as unknown) as Element);
-            const beforeNode = link.last.nextSibling;
-            const parentNode = link.last.parentNode;
-            if (beforeNode != null) {
-              parentNode.insertBefore(newChild, beforeNode);
-              link.last = beforeNode.previousSibling;
-            } else {
-              parentNode.appendChild(newChild);
-              link.last = parentNode.lastChild;
-            }
-            break;
-          }
-
-          case "mapped_array": {
-            const mappedElem = link.mapper(e);
-            link.mappedRef.value.push(mappedElem);
-            for (const mappedLink of link.mappedRef.links) {
-              queue.push([mappedLink, mappedElem]);
-            }
-            break;
-          }
-
-          default:
-            exhaustive(link);
-        }
-      }
-    },
-
-    splice(start, deleteCount) {
-      const rest = ref.value.splice(start, deleteCount);
-      length.set(ref.value.length);
-
-      const queue: ArrLink[] = [];
-      for (const link of ref.links) {
-        queue.push(link);
-      }
-
-      while (queue.length > 0) {
-        const link = queue.shift();
-
-        switch (link.type) {
-          case "dom_element_range": {
-            let removedNode = link.anchor.nextSibling;
-            const parentNode = link.anchor.parentNode;
-
-            for (let i = 0; i < start; ++i) {
-              removedNode = removedNode.nextSibling;
-            }
-            for (let i = 0; i < deleteCount - 1; ++i) {
-              const next = removedNode.nextSibling;
-              parentNode.removeChild(removedNode);
-              removedNode = next;
-            }
-            if (deleteCount > 0) {
-              if (removedNode === link.last) {
-                link.last = removedNode.previousSibling;
-              }
-              parentNode.removeChild(removedNode);
-            }
-            break;
-          }
-
-          case "mapped_array": {
-            link.mappedRef.value.splice(start, deleteCount);
-            for (const mappedLink of link.mappedRef.links) {
-              queue.push(mappedLink);
-            }
-            break;
-          }
-
-          default:
-            exhaustive(link);
-        }
-      }
-
-      return rest;
-    },
-
-    map: (mapper) => mapArray(ref, mapper),
-    indexOf: (e) => ref.value.indexOf(e),
-    length,
-  };
-  return ref;
+  return new RxMutArray();
 };

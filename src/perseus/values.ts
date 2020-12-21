@@ -22,7 +22,7 @@ export interface RxValue<Value> {
 
 export class RxMappedValue<SourceValue, Value> implements RxValue<Value> {
   type: "scalar" = "scalar";
-  node?: RxMappedValueNode = undefined;
+  private node?: RxMappedValueNode = undefined;
 
   constructor(
     private source: RxValue<SourceValue>,
@@ -54,7 +54,7 @@ export class RxMappedValue<SourceValue, Value> implements RxValue<Value> {
 
 export class RxMutValue<Value> implements RxValue<Value> {
   type: "scalar" = "scalar";
-  dependees: RxValueNode[] = [];
+  private dependees: RxValueNode[] = [];
 
   constructor(private value: Value) {}
 
