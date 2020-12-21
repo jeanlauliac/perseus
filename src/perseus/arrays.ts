@@ -22,34 +22,8 @@ export interface RxArray<Elem> {
   readonly length: RxValue<number>;
 
   map<MappedElem>(mapper: (_: Elem) => MappedElem): RxArray<MappedElem>;
-  register(node: RxArrayNode): Elem[];
+  register(initNode: (_: Elem[]) => RxArrayNode): void;
 }
-
-// function initializeNode(value: unknown[], node: RxArrayNode) {
-//   switch (node.type) {
-//     case "dom_element_range": {
-//       for (const elem of value) {
-//         if (
-//           typeof elem == "object" &&
-//           (elem as RxArray<unknown>).type === "array"
-//         ) {
-//           throw new Error("arrays cannot be nested");
-//         }
-//         render(node.parentElement, elem as Element);
-//       }
-//       node.last = node.parentElement.lastChild;
-//       break;
-//     }
-
-//     case "mapped_array": {
-//       node.value = value.map(node.mapper);
-//       break;
-//     }
-
-//     default:
-//       exhaustive(node);
-//   }
-// }
 
 class RxMappedArray<SourceElem, Elem> implements RxArray<Elem> {
   type: "array" = "array";
@@ -68,29 +42,29 @@ class RxMappedArray<SourceElem, Elem> implements RxArray<Elem> {
     return new RxMappedArray(this, mapper);
   }
 
-  register(node: RxArrayNode): Elem[] {
+  register(initNode: (_: Elem[]) => RxArrayNode): void {
     if (this.node != null) {
-      this.node.dependees.push(node);
-      return this.node.value as Elem[];
+      this.node.dependees.push(initNode(this.node.value as Elem[]));
+      return;
     }
-    this.node = {
-      type: "mapped_array",
-      mapper: this.mapper,
-      value: [],
-      dependees: [node],
-    };
-    const sourceValue = this.source.register(this.node);
-    return (this.node.value = sourceValue.map(this.mapper));
+    this.source.register((sourceValue) => {
+      const value = sourceValue.map(this.mapper);
+      return {
+        type: "mapped_array",
+        mapper: this.mapper,
+        value,
+        dependees: [initNode(value)],
+      };
+    });
   }
 }
 
 export class RxMutArray<Elem> implements RxArray<Elem> {
   type: "array" = "array";
-  private _value: Elem[] = [];
   private _length: RxMutValue<number> = new RxMutValue(0);
   private dependees: RxArrayNode[] = [];
 
-  RxMutArray() {}
+  constructor(private _value: Elem[]) {}
 
   get length() {
     return this._length;
@@ -104,9 +78,8 @@ export class RxMutArray<Elem> implements RxArray<Elem> {
     return new RxMappedArray(this, mapper);
   }
 
-  register(node: RxArrayNode): Elem[] {
-    this.dependees.push(node);
-    return this._value;
+  register(initNode: (_: Elem[]) => RxArrayNode): void {
+    this.dependees.push(initNode(this._value));
   }
 
   indexOf(e: Elem): number {
@@ -203,6 +176,6 @@ export class RxMutArray<Elem> implements RxArray<Elem> {
   }
 }
 
-export const useArray = <Elem>(): RxMutArray<Elem> => {
-  return new RxMutArray();
+export const useArray = <Elem>(initialValue: Elem[] = []): RxMutArray<Elem> => {
+  return new RxMutArray(initialValue);
 };

@@ -96,23 +96,22 @@ const renderImpl = (parentElement: Node, element: Element) => {
     case "array": {
       const anchor = document.createComment("array anchor");
       parentElement.appendChild(anchor);
-      const node: RxDOMArrayNode = {
-        type: "dom_element_range",
-        anchor,
-        last: anchor,
-      };
-      const value = element.register(node);
-
-      for (const elem of value) {
-        if (
-          typeof elem == "object" &&
-          (elem as RxArray<unknown>).type === "array"
-        ) {
-          throw new Error("arrays cannot be nested");
+      element.register((value) => {
+        for (const elem of value) {
+          if (
+            typeof elem == "object" &&
+            (elem as RxArray<unknown>).type === "array"
+          ) {
+            throw new Error("arrays cannot be nested");
+          }
+          render(parentElement, elem as Element);
         }
-        render(parentElement, elem as Element);
-      }
-      node.last = parentElement.lastChild;
+        return {
+          type: "dom_element_range",
+          anchor,
+          last: parentElement.lastChild,
+        };
+      });
 
       return;
     }
