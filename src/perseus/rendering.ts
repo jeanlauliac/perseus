@@ -42,13 +42,13 @@ const renderImpl = (parentElement: Node, element: Element) => {
       if (element.tag === "input") {
         const input = el as HTMLInputElement;
         if (props.value != null) {
-          input.value = props.value.value;
-          props.value.links.push({ type: "input_value", element: input });
+          input.value = props.value.currentValue;
+          props.value.register({ type: "input_value", element: input });
         }
         input.oninput = (ev: InputEvent) => {
           if (props.onChange != null) props.onChange(ev);
-          if (props.value.value !== input.value) {
-            input.value = props.value.value;
+          if (props.value.currentValue !== input.value) {
+            input.value = props.value.currentValue;
           }
         };
         if (props.onKeyPress != null) {
@@ -62,13 +62,13 @@ const renderImpl = (parentElement: Node, element: Element) => {
       if (props.onPress != null) el.onclick = props.onPress;
 
       for (const styleName of Object.keys(props.style || {})) {
-        const value = props.style[styleName];
-        if (typeof value === "string") {
-          (el.style as any)[styleName] = value;
+        const styleValue = props.style[styleName];
+        if (typeof styleValue === "string") {
+          (el.style as any)[styleName] = styleValue;
           continue;
         }
-        (el.style as any)[styleName] = value.value;
-        value.links.push({ type: "style_value", element: el, styleName });
+        (el.style as any)[styleName] = styleValue.currentValue;
+        styleValue.register({ type: "style_value", element: el, styleName });
       }
 
       parentElement.appendChild(el);
@@ -76,8 +76,8 @@ const renderImpl = (parentElement: Node, element: Element) => {
     }
 
     case "scalar": {
-      const node = document.createTextNode(element.value);
-      element.links.push({ type: "text_node", node });
+      const node = document.createTextNode(element.currentValue);
+      element.register({ type: "text_node", node });
       parentElement.appendChild(node);
       return;
     }

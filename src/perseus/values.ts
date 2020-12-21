@@ -1,93 +1,121 @@
 import { assert, exhaustive } from "./utils";
 
-type RxValueLink =
+type RxMappedValueNode = {
+  type: "mapped_value";
+  mapper: (_: unknown) => unknown;
+  value: unknown;
+  dependees: RxValueNode[];
+};
+
+type RxValueNode =
   | { type: "input_value"; element: HTMLInputElement }
   | { type: "style_value"; element: HTMLElement; styleName: string }
   | { type: "text_node"; node: Text }
-  | {
-      type: "mapped_value";
-      mapper: (_: unknown) => unknown;
-      ref: RxValue<unknown>;
-    };
+  | RxMappedValueNode;
 
-export type RxValue<Value> = {
+export interface RxValue<Value> {
   type: "scalar";
-  value: Value;
-  links: RxValueLink[];
-  map: <MappedValue>(mapper: (_: Value) => MappedValue) => RxValue<MappedValue>;
-};
-
-export type RxMutValue<Value> = RxValue<Value> & {
-  set: (_: Value) => void;
-};
-
-export function useValue<Value>(initialValue: Value): RxMutValue<Value> {
-  const ref: RxMutValue<Value> = {
-    type: "scalar",
-    value: initialValue,
-    links: [],
-    set: (value) => set(ref, value),
-    map: (mapper) => map(ref, mapper),
-  };
-  return ref;
+  readonly currentValue: Value;
+  map<MappedValue>(mapper: (_: Value) => MappedValue): RxValue<MappedValue>;
+  register(node: RxValueNode): void;
 }
 
-function set<Value>(ref: RxMutValue<Value>, newValue: Value) {
-  ref.value = newValue;
-  const queue: [unknown, RxValueLink][] = ref.links.map((link) => [
-    newValue,
-    link,
-  ]);
+export class RxMappedValue<SourceValue, Value> implements RxValue<Value> {
+  type: "scalar" = "scalar";
+  node?: RxMappedValueNode = undefined;
 
-  while (queue.length > 0) {
-    const [value, link] = queue.shift();
-    switch (link.type) {
-      case "input_value": {
-        assert(typeof value === "string");
-        link.element.value = value;
-        break;
-      }
+  constructor(
+    private source: RxValue<SourceValue>,
+    private mapper: (_: SourceValue) => Value
+  ) {}
 
-      case "text_node": {
-        assert(typeof value === "string");
-        link.node.data = value;
-        break;
-      }
-
-      case "mapped_value": {
-        const mappedValue = (link.ref.value = link.mapper(ref.value));
-        for (const mappedLink of link.ref.links) {
-          queue.push([mappedValue, mappedLink]);
-        }
-        break;
-      }
-
-      case "style_value": {
-        assert(typeof value === "string" || value == null);
-        if (value == null) {
-          (link.element.style as any)[link.styleName] = "";
-          break;
-        }
-        (link.element.style as any)[link.styleName] = value;
-        break;
-      }
-
-      default:
-        exhaustive(link);
+  register(node: RxValueNode) {
+    if (this.node != null) {
+      this.node.dependees.push(node);
     }
+    this.node = {
+      type: "mapped_value",
+      mapper: this.mapper,
+      value: this.currentValue,
+      dependees: [node],
+    };
+    this.source.register(this.node);
+  }
+
+  map<MappedValue>(mapper: (_: Value) => MappedValue): RxValue<MappedValue> {
+    return new RxMappedValue(this, mapper);
+  }
+
+  get currentValue(): Value {
+    if (this.node != null) return this.node.value as Value;
+    return this.mapper(this.source.currentValue);
   }
 }
 
-function map<Value, MappedValue>(
-  ref: RxValue<Value>,
-  mapper: (_: Value) => MappedValue
-) {
-  const mappedRef: RxValue<MappedValue> = {
-    type: "scalar",
-    value: mapper(ref.value),
-    links: [],
-    map: (mapper) => map(mappedRef, mapper),
-  };
-  ref.links.push({ type: "mapped_value", mapper, ref: mappedRef });
-  return mappedRef;
+export class RxMutValue<Value> implements RxValue<Value> {
+  type: "scalar" = "scalar";
+  dependees: RxValueNode[] = [];
+
+  constructor(private value: Value) {}
+
+  register(node: RxValueNode) {
+    this.dependees.push(node);
+  }
+
+  set(newValue: Value) {
+    this.value = newValue;
+    const queue = this.dependees.map(
+      (node) => [newValue, node] as [unknown, RxValueNode]
+    );
+
+    while (queue.length > 0) {
+      const [value, node] = queue.shift();
+      switch (node.type) {
+        case "input_value": {
+          assert(typeof value === "string");
+          node.element.value = value;
+          break;
+        }
+
+        case "text_node": {
+          assert(typeof value === "string");
+          node.node.data = value;
+          break;
+        }
+
+        case "mapped_value": {
+          const mappedValue = (node.value = node.mapper(value));
+          for (const depNode of node.dependees) {
+            queue.push([mappedValue, depNode]);
+          }
+          break;
+        }
+
+        case "style_value": {
+          assert(typeof value === "string" || value == null);
+          if (value == null) {
+            (node.element.style as any)[node.styleName] = "";
+            break;
+          }
+          (node.element.style as any)[node.styleName] = value;
+          break;
+        }
+
+        default:
+          exhaustive(node);
+      }
+    }
+  }
+
+  map<MappedValue>(mapper: (_: Value) => MappedValue): RxValue<MappedValue> {
+    return new RxMappedValue(this, mapper);
+  }
+
+  get currentValue(): Value {
+    return this.value;
+  }
+}
+
+export function useValue<Value>(initialValue: Value): RxMutValue<Value> {
+  return new RxMutValue(initialValue);
 }
