@@ -26,29 +26,5 @@ export const jsxs = (
     return tag(props, key);
   }
 
-  switch (tag) {
-    case "div":
-    case "span":
-    case "input":
-    case "button":
-      return { type: "html_element", tag, props };
-
-    // case "input":
-    //   return {
-    //     type: "input_element",
-    //     value: props.value,
-    //     onChange: props.onChange,
-    //     onKeyPress: props.onKeyPress,
-    //   };
-
-    // case "button":
-    //   return {
-    //     type: "button_element",
-    //     onPress: props.onPress,
-    //     children: props.children,
-    //   };
-
-    default:
-      throw new Error("unknown tag");
-  }
+  return { type: "html_element", tag, props };
 };
