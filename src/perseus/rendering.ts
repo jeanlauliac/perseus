@@ -52,7 +52,7 @@ const renderImpl = (parentElement: Node, element: Element) => {
 
         input.oninput = (ev: InputEvent) => {
           if (props.onChange != null) props.onChange(ev);
-          if (node.value !== input.value) {
+          if (node != null && node.value !== input.value) {
             input.value = node.value;
           }
         };
