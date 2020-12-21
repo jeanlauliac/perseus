@@ -1,4 +1,4 @@
-import { RxArray } from "./arrays";
+import { RxArray, RxDOMArrayNode } from "./arrays";
 import { exhaustive } from "./utils";
 import { RxValue } from "./values";
 
@@ -83,25 +83,26 @@ const renderImpl = (parentElement: Node, element: Element) => {
     }
 
     case "array": {
-      const anchor = document.createComment("array anchor");
+      const anchor = document.createComment("array anchor") as Node;
       parentElement.appendChild(anchor);
+      const node: RxDOMArrayNode = {
+        type: "dom_element_range",
+        anchor,
+        last: anchor,
+      };
+      const value = element.register(node);
 
-      for (const item of element.currentValue) {
+      for (const elem of value) {
         if (
-          typeof item == "object" &&
-          (item as RxArray<unknown>).type === "array"
+          typeof elem == "object" &&
+          (elem as RxArray<unknown>).type === "array"
         ) {
           throw new Error("arrays cannot be nested");
         }
-        renderImpl(parentElement, item as Element);
+        render(parentElement, elem as Element);
       }
+      node.last = parentElement.lastChild;
 
-      const last = parentElement.lastChild;
-      element.register({
-        type: "dom_element_range",
-        anchor,
-        last,
-      });
       return;
     }
 

@@ -2,25 +2,54 @@ import { Element, render } from "./rendering";
 import { exhaustive } from "./utils";
 import { RxMutValue, RxValue, useValue } from "./values";
 
-type RxMappedArrayNode = {
+export type RxMappedArrayNode = {
   type: "mapped_array";
   mapper: (e: unknown) => unknown;
   value: unknown[];
   dependees: RxArrayNode[];
 };
 
-type RxArrayNode =
-  | { type: "dom_element_range"; anchor: Node; last: ChildNode }
-  | RxMappedArrayNode;
+export type RxDOMArrayNode = {
+  type: "dom_element_range";
+  anchor: Node;
+  last: Node;
+};
+
+export type RxArrayNode = RxDOMArrayNode | RxMappedArrayNode;
 
 export interface RxArray<Elem> {
   type: "array";
-  readonly currentValue: Elem[];
   readonly length: RxValue<number>;
 
   map<MappedElem>(mapper: (_: Elem) => MappedElem): RxArray<MappedElem>;
-  register(node: RxArrayNode): void;
+  register(node: RxArrayNode): Elem[];
 }
+
+// function initializeNode(value: unknown[], node: RxArrayNode) {
+//   switch (node.type) {
+//     case "dom_element_range": {
+//       for (const elem of value) {
+//         if (
+//           typeof elem == "object" &&
+//           (elem as RxArray<unknown>).type === "array"
+//         ) {
+//           throw new Error("arrays cannot be nested");
+//         }
+//         render(node.parentElement, elem as Element);
+//       }
+//       node.last = node.parentElement.lastChild;
+//       break;
+//     }
+
+//     case "mapped_array": {
+//       node.value = value.map(node.mapper);
+//       break;
+//     }
+
+//     default:
+//       exhaustive(node);
+//   }
+// }
 
 class RxMappedArray<SourceElem, Elem> implements RxArray<Elem> {
   type: "array" = "array";
@@ -35,32 +64,28 @@ class RxMappedArray<SourceElem, Elem> implements RxArray<Elem> {
     return this.source.length;
   }
 
-  get currentValue(): Elem[] {
-    if (this.node != null) return this.node.value as Elem[];
-    return this.source.currentValue.map(this.mapper);
-  }
-
   map<MappedElem>(mapper: (_: Elem) => MappedElem): RxArray<MappedElem> {
     return new RxMappedArray(this, mapper);
   }
 
-  register(node: RxArrayNode): void {
+  register(node: RxArrayNode): Elem[] {
     if (this.node != null) {
       this.node.dependees.push(node);
     }
     this.node = {
       type: "mapped_array",
       mapper: this.mapper,
-      value: this.currentValue,
+      value: [],
       dependees: [node],
     };
-    this.source.register(this.node);
+    const sourceValue = this.source.register(this.node);
+    return (this.node.value = sourceValue.map(this.mapper));
   }
 }
 
 export class RxMutArray<Elem> implements RxArray<Elem> {
   type: "array" = "array";
-  private value: Elem[] = [];
+  private _value: Elem[] = [];
   private _length: RxMutValue<number> = new RxMutValue(0);
   private dependees: RxArrayNode[] = [];
 
@@ -70,25 +95,26 @@ export class RxMutArray<Elem> implements RxArray<Elem> {
     return this._length;
   }
 
-  get currentValue() {
-    return this.value;
+  get value(): ReadonlyArray<Elem> {
+    return this._value;
   }
 
   map<MappedElem>(mapper: (_: Elem) => MappedElem): RxArray<MappedElem> {
     return new RxMappedArray(this, mapper);
   }
 
-  register(node: RxArrayNode) {
+  register(node: RxArrayNode): Elem[] {
     this.dependees.push(node);
+    return this._value;
   }
 
   indexOf(e: Elem): number {
-    return this.value.indexOf(e);
+    return this._value.indexOf(e);
   }
 
   push(e: Elem): void {
-    this.value.push(e);
-    this._length.set(this.value.length);
+    this._value.push(e);
+    this._length.set(this._value.length);
 
     const queue: [RxArrayNode, unknown][] = [];
     for (const node of this.dependees) {
@@ -130,8 +156,8 @@ export class RxMutArray<Elem> implements RxArray<Elem> {
   }
 
   splice(start: number, deleteCount: number): Elem[] {
-    const rest = this.value.splice(start, deleteCount);
-    this._length.set(this.value.length);
+    const rest = this._value.splice(start, deleteCount);
+    this._length.set(this._value.length);
 
     const queue: RxArrayNode[] = [...this.dependees];
     while (queue.length > 0) {
