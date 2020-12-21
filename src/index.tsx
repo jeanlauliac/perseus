@@ -1,4 +1,4 @@
-import { render, useValue, useArray, RxMutValue } from "./perseus/index";
+import { render, useValue, useArray, RxMutValue, if_ } from "./perseus/index";
 
 type Task = { id: number; name: string; isDone: RxMutValue<boolean> };
 
@@ -7,28 +7,28 @@ const Spacer = () => {
 };
 
 const TaskRow = ({ task, onDelete }: { task: Task; onDelete: () => void }) => {
+  const blockStyle = {
+    display: "flex",
+    width: "400px",
+    margin: "10px 0 10px 0",
+  };
+
   const style = {
-    textDecoration: task.isDone.map((value) => (value ? "line-through" : null)),
-    color: task.isDone.map((value) => (value ? "#aaa" : null)),
+    textDecoration: if_(task.isDone, "line-through"),
+    color: if_(task.isDone, "#aaa"),
     flexGrow: "1",
   };
+
+  const onDone = () => task.isDone.set(!task.isDone.value);
+
   return (
-    <div
-      style={{
-        display: "flex",
-        width: "400px",
-        margin: "10px 0 10px 0",
-      }}
-    >
+    <div style={blockStyle}>
       <span style={style}>{task.name}</span>
       &nbsp;
       <button onPress={onDelete}>delete</button>
       <Spacer />
-      <button
-        style={{ width: "120px" }}
-        onPress={() => task.isDone.set(!task.isDone.value)}
-      >
-        {task.isDone.map((value) => (value ? "restore" : "mark as done"))}
+      <button style={{ width: "120px" }} onPress={onDone}>
+        {if_(task.isDone, "restore", "mark as done")}
       </button>
     </div>
   );
@@ -70,7 +70,7 @@ const App = () => {
           onDelete={() => tasks.splice(tasks.indexOf(task), 1)}
         />
       ))}
-      <div>{tasks.length.map((l) => l.toString())} items</div>
+      <div>{tasks.length} items</div>
     </div>
   );
 };

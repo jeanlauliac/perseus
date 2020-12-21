@@ -1,10 +1,10 @@
-import { RxArray, RxDOMArrayNode } from "./arrays";
+import { NodeDependency, RxArray, RxDOMArrayNode } from "./arrays";
 import { exhaustive } from "./utils";
-import { RxInputValueNode, RxValue } from "./values";
+import { RxInputValueNode, RxValue, RxValueNode } from "./values";
 
 export type Element =
   | string
-  | RxValue<string>
+  | RxValue<unknown>
   | RxArray<any>
   | {
       type: "html_element";
@@ -20,14 +20,15 @@ export type Element =
       };
     };
 
-export const render = (parentElement: Node, element: Element) => {
-  renderImpl(parentElement, element);
-};
+export function render(
+  parentElement: Node,
+  element: Element
+): NodeDependency[] {
+  let deps: NodeDependency[] = [];
 
-const renderImpl = (parentElement: Node, element: Element) => {
   if (typeof element === "string") {
     parentElement.appendChild(document.createTextNode(element));
-    return;
+    return deps;
   }
 
   switch (element.type) {
@@ -36,7 +37,7 @@ const renderImpl = (parentElement: Node, element: Element) => {
       const { props } = element;
 
       for (const child of props.children || []) {
-        render(el, child);
+        deps = deps.concat(render(el, child));
       }
 
       if (element.tag === "input") {
@@ -44,10 +45,11 @@ const renderImpl = (parentElement: Node, element: Element) => {
         let node: RxInputValueNode;
 
         if (props.value != null) {
-          props.value.register((value) => {
+          node = props.value.register((value) => {
             input.value = value;
-            return (node = { type: "input_value", element: input, value });
+            return { type: "input_value", element: input, value };
           });
+          deps.push({ source: props.value, node });
         }
 
         input.oninput = (ev: InputEvent) => {
@@ -73,29 +75,33 @@ const renderImpl = (parentElement: Node, element: Element) => {
           (el.style as any)[styleName] = styleValue;
           continue;
         }
-        styleValue.register((value) => {
+        const node = styleValue.register((value) => {
           (el.style as any)[styleName] = value;
           return { type: "style_value", element: el, styleName };
         });
+        deps.push({ source: styleValue, node });
       }
 
       parentElement.appendChild(el);
-      return;
+      return deps;
     }
 
     case "scalar": {
-      let node: Text;
-      element.register((value) => {
-        node = document.createTextNode(value);
-        return { type: "text_node", node };
+      const node = element.register((value) => {
+        const text = document.createTextNode(String(value));
+        return { type: "text_node", node: text };
       });
-      parentElement.appendChild(node);
-      return;
+      parentElement.appendChild(node.node);
+      deps.push({ source: element, node });
+      return deps;
     }
 
     case "array": {
       const anchor = document.createComment("array anchor");
       parentElement.appendChild(anchor);
+
+      const depsArray: NodeDependency[][] = [];
+
       element.register((value) => {
         for (const elem of value) {
           if (
@@ -104,19 +110,20 @@ const renderImpl = (parentElement: Node, element: Element) => {
           ) {
             throw new Error("arrays cannot be nested");
           }
-          render(parentElement, elem as Element);
+          depsArray.push(render(parentElement, elem as Element));
         }
         return {
           type: "dom_element_range",
           anchor,
           last: parentElement.lastChild,
+          depsArray,
         };
       });
 
-      return;
+      return deps;
     }
 
     default:
       exhaustive(element);
   }
-};
+}

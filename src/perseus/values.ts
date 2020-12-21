@@ -22,8 +22,8 @@ export type RxValueNode =
 export interface RxValue<Value> {
   type: "scalar";
 
-  map<MappedValue>(mapper: (_: Value) => MappedValue): RxValue<MappedValue>;
-  register(initNode: (_: Value) => RxValueNode): void;
+  register<Node extends RxValueNode>(initNode: (_: Value) => Node): Node;
+  unregister(node: RxValueNode): void;
 }
 
 export class RxMappedValue<SourceValue, Value> implements RxValue<Value> {
@@ -35,24 +35,38 @@ export class RxMappedValue<SourceValue, Value> implements RxValue<Value> {
     private mapper: (_: SourceValue) => Value
   ) {}
 
-  register(initNode: (_: Value) => RxValueNode): void {
+  register<Node extends RxValueNode>(initNode: (_: Value) => Node): Node {
+    let newNode;
+
     if (this.node != null) {
-      this.node.dependees.push(initNode(this.node.value as Value));
-      return;
+      newNode = initNode(this.node.value as Value);
+      this.node.dependees.push(newNode);
+      return newNode;
     }
-    this.source.register((sourceValue) => {
+
+    this.node = this.source.register((sourceValue) => {
       const value = this.mapper(sourceValue);
-      return (this.node = {
+      newNode = initNode(value);
+
+      return {
         type: "mapped_value",
         mapper: this.mapper,
         value,
-        dependees: [initNode(value)],
-      });
+        dependees: [newNode],
+      };
     });
+
+    return newNode;
   }
 
-  map<MappedValue>(mapper: (_: Value) => MappedValue): RxValue<MappedValue> {
-    return new RxMappedValue(this, mapper);
+  unregister(node: RxValueNode): void {
+    const index = this.node.dependees.indexOf(node);
+    assert(index >= 0);
+    this.node.dependees.splice(index, 1);
+    if (this.node.dependees.length > 0) return;
+
+    this.source.unregister(this.node);
+    this.node = undefined;
   }
 }
 
@@ -66,8 +80,16 @@ export class RxMutValue<Value> implements RxValue<Value> {
     return this._value;
   }
 
-  register(initNode: (_: Value) => RxValueNode): void {
-    this.dependees.push(initNode(this._value));
+  register<Node extends RxValueNode>(initNode: (_: Value) => Node): Node {
+    const newNode = initNode(this._value);
+    this.dependees.push(newNode);
+    return newNode;
+  }
+
+  unregister(node: RxValueNode): void {
+    const index = this.dependees.indexOf(node);
+    assert(index >= 0);
+    this.dependees.splice(index, 1);
   }
 
   set(newValue: Value) {
@@ -86,8 +108,7 @@ export class RxMutValue<Value> implements RxValue<Value> {
         }
 
         case "text_node": {
-          assert(typeof value === "string");
-          node.node.data = value;
+          node.node.data = String(value);
           break;
         }
 
@@ -113,10 +134,6 @@ export class RxMutValue<Value> implements RxValue<Value> {
           exhaustive(node);
       }
     }
-  }
-
-  map<MappedValue>(mapper: (_: Value) => MappedValue): RxValue<MappedValue> {
-    return new RxMappedValue(this, mapper);
   }
 }
 

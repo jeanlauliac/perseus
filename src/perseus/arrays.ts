@@ -1,6 +1,6 @@
 import { Element, render } from "./rendering";
 import { exhaustive } from "./utils";
-import { RxMutValue, RxValue, useValue } from "./values";
+import { RxMutValue, RxValue, RxValueNode, useValue } from "./values";
 
 export type RxMappedArrayNode = {
   type: "mapped_array";
@@ -9,10 +9,13 @@ export type RxMappedArrayNode = {
   dependees: RxArrayNode[];
 };
 
+export type NodeDependency = { source: RxValue<unknown>; node: RxValueNode };
+
 export type RxDOMArrayNode = {
   type: "dom_element_range";
   anchor: Node;
   last: Node;
+  depsArray: NodeDependency[][];
 };
 
 export type RxArrayNode = RxDOMArrayNode | RxMappedArrayNode;
@@ -101,7 +104,7 @@ export class RxMutArray<Elem> implements RxArray<Elem> {
       switch (node.type) {
         case "dom_element_range": {
           const newChild = document.createDocumentFragment();
-          render(newChild, (elem as unknown) as Element);
+          node.depsArray.push(render(newChild, (elem as unknown) as Element));
           const beforeNode = node.last.nextSibling;
           const parentNode = node.last.parentNode;
           if (beforeNode != null) {
@@ -139,6 +142,13 @@ export class RxMutArray<Elem> implements RxArray<Elem> {
 
       switch (node.type) {
         case "dom_element_range": {
+          const removedDeps = node.depsArray.splice(start, deleteCount);
+          for (const deps of removedDeps) {
+            for (const dep of deps) {
+              dep.source.unregister(dep.node);
+            }
+          }
+
           let removedNode = node.anchor.nextSibling;
           const parentNode = node.anchor.parentNode;
 
