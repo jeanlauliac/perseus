@@ -1,23 +1,29 @@
 import { assert, exhaustive } from "./utils";
 
-type RxMappedValueNode = {
+export type RxMappedValueNode = {
   type: "mapped_value";
   mapper: (_: unknown) => unknown;
   value: unknown;
   dependees: RxValueNode[];
 };
 
-type RxValueNode =
-  | { type: "input_value"; element: HTMLInputElement }
+export type RxInputValueNode = {
+  type: "input_value";
+  element: HTMLInputElement;
+  value: string;
+};
+
+export type RxValueNode =
+  | RxInputValueNode
   | { type: "style_value"; element: HTMLElement; styleName: string }
   | { type: "text_node"; node: Text }
   | RxMappedValueNode;
 
 export interface RxValue<Value> {
   type: "scalar";
-  readonly currentValue: Value;
+
   map<MappedValue>(mapper: (_: Value) => MappedValue): RxValue<MappedValue>;
-  register(node: RxValueNode): void;
+  register(initNode: (_: Value) => RxValueNode): void;
 }
 
 export class RxMappedValue<SourceValue, Value> implements RxValue<Value> {
@@ -29,26 +35,24 @@ export class RxMappedValue<SourceValue, Value> implements RxValue<Value> {
     private mapper: (_: SourceValue) => Value
   ) {}
 
-  register(node: RxValueNode) {
+  register(initNode: (_: Value) => RxValueNode): void {
     if (this.node != null) {
-      this.node.dependees.push(node);
+      this.node.dependees.push(initNode(this.node.value as Value));
+      return;
     }
-    this.node = {
-      type: "mapped_value",
-      mapper: this.mapper,
-      value: this.currentValue,
-      dependees: [node],
-    };
-    this.source.register(this.node);
+    this.source.register((sourceValue) => {
+      const value = this.mapper(sourceValue);
+      return (this.node = {
+        type: "mapped_value",
+        mapper: this.mapper,
+        value,
+        dependees: [initNode(value)],
+      });
+    });
   }
 
   map<MappedValue>(mapper: (_: Value) => MappedValue): RxValue<MappedValue> {
     return new RxMappedValue(this, mapper);
-  }
-
-  get currentValue(): Value {
-    if (this.node != null) return this.node.value as Value;
-    return this.mapper(this.source.currentValue);
   }
 }
 
@@ -56,14 +60,18 @@ export class RxMutValue<Value> implements RxValue<Value> {
   type: "scalar" = "scalar";
   private dependees: RxValueNode[] = [];
 
-  constructor(private value: Value) {}
+  constructor(private _value: Value) {}
 
-  register(node: RxValueNode) {
-    this.dependees.push(node);
+  get value() {
+    return this._value;
+  }
+
+  register(initNode: (_: Value) => RxValueNode): void {
+    this.dependees.push(initNode(this._value));
   }
 
   set(newValue: Value) {
-    this.value = newValue;
+    this._value = newValue;
     const queue = this.dependees.map(
       (node) => [newValue, node] as [unknown, RxValueNode]
     );
@@ -73,7 +81,7 @@ export class RxMutValue<Value> implements RxValue<Value> {
       switch (node.type) {
         case "input_value": {
           assert(typeof value === "string");
-          node.element.value = value;
+          node.element.value = node.value = value;
           break;
         }
 
@@ -109,10 +117,6 @@ export class RxMutValue<Value> implements RxValue<Value> {
 
   map<MappedValue>(mapper: (_: Value) => MappedValue): RxValue<MappedValue> {
     return new RxMappedValue(this, mapper);
-  }
-
-  get currentValue(): Value {
-    return this.value;
   }
 }
 

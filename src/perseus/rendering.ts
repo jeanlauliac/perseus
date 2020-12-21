@@ -1,6 +1,6 @@
 import { RxArray, RxDOMArrayNode } from "./arrays";
 import { exhaustive } from "./utils";
-import { RxValue } from "./values";
+import { RxInputValueNode, RxValue } from "./values";
 
 export type Element =
   | string
@@ -41,16 +41,22 @@ const renderImpl = (parentElement: Node, element: Element) => {
 
       if (element.tag === "input") {
         const input = el as HTMLInputElement;
+        let node: RxInputValueNode;
+
         if (props.value != null) {
-          input.value = props.value.currentValue;
-          props.value.register({ type: "input_value", element: input });
+          props.value.register((value) => {
+            input.value = value;
+            return (node = { type: "input_value", element: input, value });
+          });
         }
+
         input.oninput = (ev: InputEvent) => {
           if (props.onChange != null) props.onChange(ev);
-          if (props.value.currentValue !== input.value) {
-            input.value = props.value.currentValue;
+          if (node.value !== input.value) {
+            input.value = node.value;
           }
         };
+
         if (props.onKeyPress != null) {
           input.onkeypress = props.onKeyPress;
         }
@@ -67,8 +73,10 @@ const renderImpl = (parentElement: Node, element: Element) => {
           (el.style as any)[styleName] = styleValue;
           continue;
         }
-        (el.style as any)[styleName] = styleValue.currentValue;
-        styleValue.register({ type: "style_value", element: el, styleName });
+        styleValue.register((value) => {
+          (el.style as any)[styleName] = value;
+          return { type: "style_value", element: el, styleName };
+        });
       }
 
       parentElement.appendChild(el);
@@ -76,14 +84,17 @@ const renderImpl = (parentElement: Node, element: Element) => {
     }
 
     case "scalar": {
-      const node = document.createTextNode(element.currentValue);
-      element.register({ type: "text_node", node });
+      let node: Text;
+      element.register((value) => {
+        node = document.createTextNode(value);
+        return { type: "text_node", node };
+      });
       parentElement.appendChild(node);
       return;
     }
 
     case "array": {
-      const anchor = document.createComment("array anchor") as Node;
+      const anchor = document.createComment("array anchor");
       parentElement.appendChild(anchor);
       const node: RxDOMArrayNode = {
         type: "dom_element_range",

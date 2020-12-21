@@ -26,7 +26,7 @@ const TaskRow = ({ task, onDelete }: { task: Task; onDelete: () => void }) => {
       <Spacer />
       <button
         style={{ width: "120px" }}
-        onPress={() => task.isDone.set(!task.isDone.currentValue)}
+        onPress={() => task.isDone.set(!task.isDone.value)}
       >
         {task.isDone.map((value) => (value ? "restore" : "mark as done"))}
       </button>
@@ -41,10 +41,10 @@ const App = () => {
   let nid = 1;
 
   const onPress = () => {
-    if (name.currentValue === "") return;
+    if (name.value === "") return;
     tasks.push({
       id: nid++,
-      name: name.currentValue,
+      name: name.value,
       isDone: useValue(false),
     });
     name.set("");

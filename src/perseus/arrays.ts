@@ -71,6 +71,7 @@ class RxMappedArray<SourceElem, Elem> implements RxArray<Elem> {
   register(node: RxArrayNode): Elem[] {
     if (this.node != null) {
       this.node.dependees.push(node);
+      return this.node.value as Elem[];
     }
     this.node = {
       type: "mapped_array",
