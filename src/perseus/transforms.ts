@@ -1,4 +1,4 @@
-import { RxMappedValue, RxValue } from "./values";
+import { RxMappedValue, RxValue, RxValueNode } from "./values";
 
 export function map<Value, MappedValue>(
   source: RxValue<Value>,
@@ -13,4 +13,14 @@ export function if_<Value, MappedValue>(
   falsyValue: MappedValue = null
 ): RxValue<MappedValue> {
   return map(condition, (value) => (value ? truthyValue : falsyValue));
+}
+
+type MapToRxValue<T> = { [K in keyof T]: MapToRxValue<T[K]> };
+
+export function zip<InputTuple, ZippedValue>(
+  values: MapToRxValue<InputTuple>,
+  zipper: (_: InputTuple) => ZippedValue
+): RxValue<ZippedValue> {
+  // return new RxMappedValue();
+  throw new Error("non impl");
 }

@@ -49,7 +49,7 @@ export function render(
             input.value = value;
             return { type: "input_value", element: input, value };
           });
-          deps.push({ source: props.value, node });
+          deps.push({ type: "value", source: props.value, node });
         }
 
         input.oninput = (ev: InputEvent) => {
@@ -79,7 +79,7 @@ export function render(
           (el.style as any)[styleName] = value;
           return { type: "style_value", element: el, styleName };
         });
-        deps.push({ source: styleValue, node });
+        deps.push({ type: "value", source: styleValue, node });
       }
 
       parentElement.appendChild(el);
@@ -92,7 +92,7 @@ export function render(
         return { type: "text_node", node: text };
       });
       parentElement.appendChild(node.node);
-      deps.push({ source: element, node });
+      deps.push({ type: "value", source: element, node });
       return deps;
     }
 
@@ -112,6 +112,8 @@ export function render(
           }
           depsArray.push(render(parentElement, elem as Element));
         }
+
+        deps.push({ type: "array", depsArray });
         return {
           type: "dom_element_range",
           anchor,

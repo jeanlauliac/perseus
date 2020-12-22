@@ -9,7 +9,16 @@ export type RxMappedArrayNode = {
   dependees: RxArrayNode[];
 };
 
-export type NodeDependency = { source: RxValue<unknown>; node: RxValueNode };
+export type NodeDependency =
+  | {
+      type: "value";
+      source: RxValue<unknown>;
+      node: RxValueNode;
+    }
+  | {
+      type: "array";
+      depsArray: NodeDependency[][];
+    };
 
 export type RxDOMArrayNode = {
   type: "dom_element_range";
@@ -133,42 +142,65 @@ export class RxMutArray<Elem> implements RxArray<Elem> {
   }
 
   splice(start: number, deleteCount: number): Elem[] {
-    const rest = this._value.splice(start, deleteCount);
-    this._length.set(this._value.length);
+    // Make sure `deleteCount` doesn't exceed the array, as we don't
+    // want to remove DOM nodes that aren't ours, notably.
+    deleteCount = Math.min(this._value.length - start, deleteCount);
 
+    // First off we splice the range from the base value.
+    const rest = this._value.splice(start, deleteCount);
+
+    // Queue up all the dependees we have to update.
     const queue: RxArrayNode[] = [...this.dependees];
+
     while (queue.length > 0) {
       const node = queue.shift();
 
       switch (node.type) {
+        // We need to remove DOM nodes corresponding to the array elements.
         case "dom_element_range": {
+          // Unregister anything that's used within these DOM nodes
+          // because, since we remove them from the document, we don't
+          // want them to update anymore. If we weren't removing these,
+          // they would be garbage collected, as they would keep being
+          // tracked as dependees.
           const removedDeps = node.depsArray.splice(start, deleteCount);
-          for (const deps of removedDeps) {
-            for (const dep of deps) {
-              dep.source.unregister(dep.node);
-            }
-          }
+          this._releaseDeps(removedDeps);
 
           let removedNode = node.anchor.nextSibling;
           const parentNode = node.anchor.parentNode;
 
+          // Browse all the way through the siblings to reach the first
+          // deleted node.
           for (let i = 0; i < start; ++i) {
             removedNode = removedNode.nextSibling;
           }
+
+          // Then remove them from the parent, moving to each sibling in
+          // turn. We know we won't go too far because we adjusted `deleteCount`
+          // to be the exact number of deleted element at the beginning of
+          // this function.
           for (let i = 0; i < deleteCount - 1; ++i) {
             const next = removedNode.nextSibling;
             parentNode.removeChild(removedNode);
             removedNode = next;
           }
-          if (deleteCount > 0) {
-            if (removedNode === node.last) {
-              node.last = removedNode.previousSibling;
-            }
-            parentNode.removeChild(removedNode);
+
+          if (deleteCount === 0) break;
+
+          // We handle the last node to deleted specially to make sure
+          // we update the `last` pointer, if the previous last node was
+          // deleted.
+          if (removedNode === node.last) {
+            node.last = removedNode.previousSibling;
           }
+          parentNode.removeChild(removedNode);
+
           break;
         }
 
+        // When an array is mapped it has the same number of elements,
+        // with matching indices. So we just splice at the same place,
+        // and queue the next nodes that depend on the mapped values.
         case "mapped_array": {
           node.value.splice(start, deleteCount);
           for (const mappedNode of node.dependees) {
@@ -182,7 +214,23 @@ export class RxMutArray<Elem> implements RxArray<Elem> {
       }
     }
 
+    // Update the length last thing. This might trigger other updates,
+    // we want to make that doesn't interfere with the process above.
+    this._length.set(this._value.length);
+
     return rest;
+  }
+
+  private _releaseDeps(depsArray: NodeDependency[][]) {
+    for (const deps of depsArray) {
+      for (const dep of deps) {
+        if (dep.type === "value") {
+          dep.source.unregister(dep.node);
+          continue;
+        }
+        this._releaseDeps(dep.depsArray);
+      }
+    }
   }
 }
 
