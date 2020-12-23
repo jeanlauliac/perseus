@@ -93,8 +93,11 @@ const App = () => {
     name.set("");
   };
 
+  const test = useValue<Element>(<div>test</div>);
+
   return (
     <div style={{ fontSize: "26px" }}>
+      {test}
       <TaskInput name={name} onPress={onPress} />
       <Spacer />
       <button onPress={onPress}>Add task</button>

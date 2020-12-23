@@ -1,12 +1,18 @@
 import { assert, exhaustive } from "../utils";
 import { RxValue, RxValueNode } from "./types";
 
+// This is the starting point for any sequence of transformations,
+// and the only `RxValue` which value can be directly set.
 export class RxMutValue<Value> implements RxValue<Value> {
   type: "scalar" = "scalar";
+
+  // All the nodes that need to be updated when the value changes.
   private dependees: RxValueNode[] = [];
 
   constructor(private _value: Value) {}
 
+  // Value can be read directly, but can only be set with `set`.
+  // It makes it more explicit than having a mutator.
   get value() {
     return this._value;
   }
@@ -24,7 +30,11 @@ export class RxMutValue<Value> implements RxValue<Value> {
   }
 
   set(newValue: Value) {
+    // We keep track of the value, so it can be read later.
     this._value = newValue;
+
+    // We now need to update all the transformations that depend
+    // on this value.
     const queue = this.dependees.map(
       (node) => [newValue, node] as [unknown, RxValueNode]
     );
