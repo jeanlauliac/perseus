@@ -1,4 +1,5 @@
-import { MapToRxValue, RxValue, RxZippedValue } from "./values";
+import { RxZippedValue } from "./values/RxZippedValue";
+import { MapToRxValue, RxValue } from "./values/types";
 
 export function map<Value, MappedValue>(
   source: RxValue<Value>,

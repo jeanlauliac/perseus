@@ -1,6 +1,6 @@
 import { NodeDependency, RxArray, RxDOMArrayNode } from "./arrays";
 import { exhaustive } from "./utils";
-import { RxInputValueNode, RxValue, RxValueNode } from "./values";
+import { RxInputValueNode, RxValue } from "./values/types";
 
 export type Element =
   | string

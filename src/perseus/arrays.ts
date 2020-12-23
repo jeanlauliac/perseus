@@ -1,6 +1,7 @@
 import { Element, render } from "./rendering";
 import { exhaustive } from "./utils";
-import { RxMutValue, RxValue, RxValueNode, useValue } from "./values";
+import { RxMutValue } from "./values/RxMutValue";
+import { RxValue, RxValueNode } from "./values/types";
 
 export type RxMappedArrayNode = {
   type: "mapped_array";
