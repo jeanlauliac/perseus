@@ -5,6 +5,7 @@ import {
   RxMutValue,
   if_,
   map,
+  zip,
   RxValue,
 } from "./perseus/index";
 
@@ -43,7 +44,7 @@ const TaskRow = ({
     <div style={blockStyle}>
       <span style={style}>{task.name}</span>
       &nbsp;
-      <button onPress={onEdit}>{if_(isEditing, "edit", "save")}</button>
+      <button onPress={onEdit}>{if_(isEditing, "save", "edit")}</button>
       <Spacer />
       <button onPress={onDelete}>delete</button>
       <Spacer />
@@ -82,9 +83,6 @@ const App = () => {
 
   let nid = 1;
 
-  const second = useValue<string>("wef");
-  const third = zip([name, second], ([v1, v2]) => v1+v2));
-
   const onPress = () => {
     if (name.value === "") return;
     tasks.push({
@@ -97,18 +95,25 @@ const App = () => {
 
   return (
     <div style={{ fontSize: "26px" }}>
-      {third}
       <TaskInput name={name} onPress={onPress} />
       <Spacer />
       <button onPress={onPress}>Add task</button>
-      {tasks.map((task) => (
-        <TaskRow
-          task={task}
-          onDelete={() => tasks.splice(tasks.indexOf(task), 1)}
-          onEdit={() => editingTask.set(task)}
-          isEditing={map(editingTask, (value) => task === value)}
-        />
-      ))}
+      {tasks.map((task) => {
+        return (
+          <TaskRow
+            task={task}
+            onDelete={() => tasks.splice(tasks.indexOf(task), 1)}
+            onEdit={() => {
+              if (editingTask.value !== task) {
+                editingTask.set(task);
+              } else {
+                editingTask.set(null);
+              }
+            }}
+            isEditing={map(editingTask, (value) => task === value)}
+          />
+        );
+      })}
       <div>{tasks.length} items</div>
     </div>
   );
