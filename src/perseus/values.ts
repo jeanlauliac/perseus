@@ -1,12 +1,5 @@
 import { assert, exhaustive } from "./utils";
 
-export type RxMappedValueNode = {
-  type: "mapped_value";
-  mapper: (_: unknown) => unknown;
-  value: unknown;
-  dependees: RxValueNode[];
-};
-
 type RxZippedValueNodeContext = {
   sourceValues: unknown[];
   zipper: (_: unknown[]) => unknown;
@@ -28,10 +21,9 @@ export type RxInputValueNode = {
 
 export type RxValueNode =
   | RxInputValueNode
+  | RxZippedValueNode
   | { type: "style_value"; element: HTMLElement; styleName: string }
-  | { type: "text_node"; node: Text }
-  | RxMappedValueNode
-  | RxZippedValueNode;
+  | { type: "text_node"; node: Text };
 
 export interface RxValue<Value> {
   type: "scalar";
@@ -40,59 +32,25 @@ export interface RxValue<Value> {
   unregister(node: RxValueNode): void;
 }
 
-export class RxMappedValue<SourceValue, Value> implements RxValue<Value> {
-  type: "scalar" = "scalar";
-  private node?: RxMappedValueNode = undefined;
-
-  constructor(
-    private source: RxValue<SourceValue>,
-    private mapper: (_: SourceValue) => Value
-  ) {}
-
-  register<Node extends RxValueNode>(initNode: (_: Value) => Node): Node {
-    let newNode;
-
-    if (this.node != null) {
-      newNode = initNode(this.node.value as Value);
-      this.node.dependees.push(newNode);
-      return newNode;
-    }
-
-    this.node = this.source.register((sourceValue) => {
-      const value = this.mapper(sourceValue);
-      newNode = initNode(value);
-
-      return {
-        type: "mapped_value",
-        mapper: this.mapper,
-        value,
-        dependees: [newNode],
-      };
-    });
-
-    return newNode;
-  }
-
-  unregister(node: RxValueNode): void {
-    const index = this.node.dependees.indexOf(node);
-    assert(index >= 0);
-    this.node.dependees.splice(index, 1);
-    if (this.node.dependees.length > 0) return;
-
-    this.source.unregister(this.node);
-    this.node = undefined;
-  }
-}
-
 export type MapToRxValue<T> = { [K in keyof T]: RxValue<T[K]> };
 
+// This handles 'zipping' several other `RxValues` together into a single
+// output value. Zipping is just the same as a 'map' operation, just
+// with several inputs at a time.
 export class RxZippedValue<
   InputTuple extends ReadonlyArray<unknown>,
   ZippedValue
 > implements RxValue<ZippedValue> {
   type: "scalar" = "scalar";
-  private _nodes: RxZippedValueNode[] = [];
-  private _context?: RxZippedValueNodeContext;
+
+  // The nodes in the update graph that we created
+  // to control each input value.
+  private _nodes?: RxZippedValueNode[] = undefined;
+
+  // The context is basically a node of the graph
+  // that takes all the value nodes as input.
+  private _context?: RxZippedValueNodeContext = undefined;
+
   private _sources: ReadonlyArray<RxValue<unknown>>;
   private _zipper: (_: unknown) => unknown;
 
@@ -105,14 +63,17 @@ export class RxZippedValue<
   }
 
   register<Node extends RxValueNode>(initNode: (_: ZippedValue) => Node): Node {
-    let newNode;
-
+    // If there's a context, we already registered a dependee before, we
+    // are already in the update graph and the value is up-to-date.
+    // We just append the new dependendee.
     if (this._context != null) {
-      newNode = initNode(this._context.value as ZippedValue);
+      const newNode = initNode(this._context.value as ZippedValue);
       this._context.dependees.push(newNode);
       return newNode;
     }
 
+    // Create a skeleton of the context. We need to construct the nodes,
+    // but we don't have any values yet.
     let context: RxZippedValueNodeContext;
     this._context = context = {
       sourceValues: [],
@@ -121,6 +82,10 @@ export class RxZippedValue<
       dependees: [],
     };
 
+    // Register a node into each source, keeping in track the exact
+    // index within the source array. These indices will be matched in the
+    // `_nodes` and the `sourceValues` arrays, and they all have the same
+    // length.
     this._nodes = this._sources.map((source, index) =>
       source.register((sourceValue) => {
         context.sourceValues.push(sourceValue);
@@ -128,20 +93,35 @@ export class RxZippedValue<
       })
     );
 
+    // Now that we registered all inputs, we have our array of source values.
+    // We can call the user-defined zipper callback to compute the initial
+    // 'zipped' value, which in turns allows us to initialize the dependee.
     context.value = this._zipper(context.sourceValues);
-    newNode = initNode(context.value as ZippedValue);
+    const newNode = initNode(context.value as ZippedValue);
     context.dependees.push(newNode);
 
     return newNode;
   }
 
   unregister(node: RxValueNode): void {
-    // const index = this.node.dependees.indexOf(node);
-    // assert(index >= 0);
-    // this.node.dependees.splice(index, 1);
-    // if (this.node.dependees.length > 0) return;
-    // this.source.unregister(this.node);
-    // this.node = undefined;
+    // That node has to be in our dependees.
+    const index = this._context.dependees.indexOf(node);
+    assert(index >= 0);
+
+    // Get rid of it, if there are other dependees, then
+    // nothing else happen, we need to keep updating the values.
+    this._context.dependees.splice(index, 1);
+    if (this._context.dependees.length > 0) return;
+
+    // If we don't need the nodes anymore, we'll unregister
+    // everything (might allow for our sources to unregister their
+    // own sources, in turn). We make sure to empty the state so
+    // that this value can become live again if `register` is called.
+    this._sources.forEach((source, index) => {
+      source.unregister(this._nodes[index]);
+    });
+    this._nodes = undefined;
+    this._context = undefined;
   }
 }
 
@@ -183,15 +163,8 @@ export class RxMutValue<Value> implements RxValue<Value> {
         }
 
         case "text_node": {
+          // Super simple, just need to update the text shown.
           node.node.data = String(value);
-          break;
-        }
-
-        case "mapped_value": {
-          const mappedValue = (node.value = node.mapper(value));
-          for (const depNode of node.dependees) {
-            queue.push([mappedValue, depNode]);
-          }
           break;
         }
 
@@ -213,12 +186,18 @@ export class RxMutValue<Value> implements RxValue<Value> {
         }
 
         case "style_value": {
-          assert(typeof value === "string" || value == null);
+          // Null/undefined means we want to remove the style.
+          // Setting the corresponding field to empty string achieves that
+          // per the DOM API
           if (value == null) {
             (node.element.style as any)[node.styleName] = "";
             break;
           }
-          (node.element.style as any)[node.styleName] = value;
+
+          // Otherwise, we cast the value to a string. That allows
+          // setting numbers directly for example.
+          (node.element.style as any)[node.styleName] = String(value);
+
           break;
         }
 

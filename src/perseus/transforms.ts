@@ -1,10 +1,10 @@
-import { MapToRxValue, RxMappedValue, RxValue, RxZippedValue } from "./values";
+import { MapToRxValue, RxValue, RxZippedValue } from "./values";
 
 export function map<Value, MappedValue>(
   source: RxValue<Value>,
   mapper: (_: Value) => MappedValue
 ): RxValue<MappedValue> {
-  return new RxMappedValue(source, mapper);
+  return new RxZippedValue([source], (values) => mapper(values[0]));
 }
 
 export function if_<Value, MappedValue>(
@@ -19,5 +19,5 @@ export function zip<InputTuple extends ReadonlyArray<unknown>, ZippedValue>(
   values: MapToRxValue<InputTuple>,
   zipper: (_: InputTuple) => ZippedValue
 ): RxValue<ZippedValue> {
-  return new RxZippedValue<InputTuple, ZippedValue>(values, zipper);
+  return new RxZippedValue(values, zipper);
 }
