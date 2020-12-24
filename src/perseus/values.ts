@@ -1,20 +1,11 @@
-import { releaseDeps } from "../arrays";
-import { Element, renderRxValue } from "../rendering";
-import { assert, exhaustive } from "../utils";
-import { RxValue, RxValueNode } from "./types";
+import { assert, exhaustive } from "./utils";
 
-// This is the starting point for any sequence of transformations,
-// and the only `RxValue` which value can be directly set.
 export class RxMutValue<Value> implements RxValue<Value> {
-  type: "rx_value" = "rx_value";
-
-  // All the nodes that need to be updated when the value changes.
+  type: "scalar" = "scalar";
   private dependees: RxValueNode[] = [];
 
   constructor(private _value: Value) {}
 
-  // Value can be read directly, but can only be set with `set`.
-  // It makes it more explicit than having a mutator.
   get value() {
     return this._value;
   }
@@ -32,11 +23,7 @@ export class RxMutValue<Value> implements RxValue<Value> {
   }
 
   set(newValue: Value) {
-    // We keep track of the value, so it can be read later.
     this._value = newValue;
-
-    // We now need to update all the transformations that depend
-    // on this value.
     const queue = this.dependees.map(
       (node) => [newValue, node] as [unknown, RxValueNode]
     );
@@ -50,35 +37,9 @@ export class RxMutValue<Value> implements RxValue<Value> {
           break;
         }
 
-        case "dynamic_node": {
-          // If value is null is node is already a comment, we're done.
-          if (value == null && node.node.nodeType === document.COMMENT_NODE)
-            break;
-
-          // If value was and is still a string, we just update the text node.
-          if (
-            (typeof value === "string" || typeof value === "number") &&
-            node.node.nodeType === document.TEXT_NODE
-          ) {
-            (node.node as Text).data = String(value);
-            break;
-          }
-
-          // Otherwise we need to recreate the node. We don't bother with diffing,
-          // if the node was the same, user should use RxValues as attribute instead.
-          //
-          // First off we make sure anything used *inside* the node is released,
-          // we don't want to update that old node anymore.
-          releaseDeps(node.deps);
-
-          // Re-render a fresh new DOM node, replace it.
-          const [newNode, newDeps] = renderRxValue(value as Element);
-          (node.node as ChildNode).replaceWith(newNode);
-
-          // Update the tracked data.
-          node.node = newNode;
-          node.deps = newDeps;
-
+        case "text_node": {
+          // Super simple, just need to update the text shown.
+          node.node.data = String(value);
           break;
         }
 

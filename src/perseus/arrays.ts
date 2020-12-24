@@ -165,7 +165,7 @@ export class RxMutArray<Elem> implements RxArray<Elem> {
           // they would be garbage collected, as they would keep being
           // tracked as dependees.
           const removedDeps = node.depsArray.splice(start, deleteCount);
-          this._releaseDeps(removedDeps);
+          releaseDepsArray(removedDeps);
 
           let removedNode = node.anchor.nextSibling;
           const parentNode = node.anchor.parentNode;
@@ -221,20 +221,24 @@ export class RxMutArray<Elem> implements RxArray<Elem> {
 
     return rest;
   }
-
-  private _releaseDeps(depsArray: NodeDependency[][]) {
-    for (const deps of depsArray) {
-      for (const dep of deps) {
-        if (dep.type === "value") {
-          dep.source.unregister(dep.node);
-          continue;
-        }
-        this._releaseDeps(dep.depsArray);
-      }
-    }
-  }
 }
 
 export const useArray = <Elem>(initialValue: Elem[] = []): RxMutArray<Elem> => {
   return new RxMutArray(initialValue);
 };
+
+export function releaseDeps(deps: NodeDependency[]) {
+  for (const dep of deps) {
+    if (dep.type === "value") {
+      dep.source.unregister(dep.node);
+      continue;
+    }
+    releaseDepsArray(dep.depsArray);
+  }
+}
+
+export function releaseDepsArray(depsArray: NodeDependency[][]) {
+  for (const deps of depsArray) {
+    releaseDeps(deps);
+  }
+}

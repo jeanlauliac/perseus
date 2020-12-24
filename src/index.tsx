@@ -9,7 +9,11 @@ import {
   RxValue,
 } from "./perseus/index";
 
-type Task = { id: number; name: string; isDone: RxMutValue<boolean> };
+type Task = {
+  id: number;
+  name: RxMutValue<string>;
+  isDone: RxMutValue<boolean>;
+};
 
 const Spacer = () => {
   return <div style={{ display: "inline-block", width: "10px" }} />;
@@ -40,11 +44,38 @@ const TaskRow = ({
 
   const onDone = () => task.isDone.set(!task.isDone.value);
 
+  const onSave = () => {
+    task.name.set(newName.value);
+    onEdit();
+  };
+
+  const newName = useValue(task.name.value);
+  const nameOrEditor = map(isEditing, (value) => {
+    if (!value) return <span style={style}>{task.name}</span>;
+
+    newName.set(task.name.value);
+    return (
+      <input
+        value={newName}
+        onChange={(ev: InputEvent) =>
+          newName.set((ev.target as HTMLInputElement).value)
+        }
+        onKeyPress={(e: KeyboardEvent) => {
+          if (e.key === "Enter") onSave();
+        }}
+      />
+    );
+  });
+
   return (
     <div style={blockStyle}>
-      <span style={style}>{task.name}</span>
+      {nameOrEditor}
       &nbsp;
-      <button onPress={onEdit}>{if_(isEditing, "save", "edit")}</button>
+      {if_(
+        isEditing,
+        <button onPress={onSave}>save</button>,
+        <button onPress={onEdit}>edit</button>
+      )}
       <Spacer />
       <button onPress={onDelete}>delete</button>
       <Spacer />
@@ -87,17 +118,14 @@ const App = () => {
     if (name.value === "") return;
     tasks.push({
       id: nid++,
-      name: name.value,
+      name: useValue(name.value),
       isDone: useValue(false),
     });
     name.set("");
   };
 
-  const test = useValue<Element>(<div>test</div>);
-
   return (
     <div style={{ fontSize: "26px" }}>
-      {test}
       <TaskInput name={name} onPress={onPress} />
       <Spacer />
       <button onPress={onPress}>Add task</button>
@@ -105,7 +133,10 @@ const App = () => {
         return (
           <TaskRow
             task={task}
-            onDelete={() => tasks.splice(tasks.indexOf(task), 1)}
+            onDelete={() => {
+              tasks.splice(tasks.indexOf(task), 1);
+              if (editingTask.value === task) editingTask.set(null);
+            }}
             onEdit={() => {
               if (editingTask.value !== task) {
                 editingTask.set(task);

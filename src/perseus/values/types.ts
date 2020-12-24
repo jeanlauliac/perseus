@@ -1,3 +1,5 @@
+import { NodeDependency } from "../arrays";
+
 export type RxZippedValueNodeContext = {
   sourceValues: unknown[];
   zipper: (_: unknown[]) => unknown;
@@ -21,10 +23,10 @@ export type RxValueNode =
   | RxInputValueNode
   | RxZippedValueNode
   | { type: "style_value"; element: HTMLElement; styleName: string }
-  | { type: "text_node"; node: Text };
+  | { type: "dynamic_node"; node: Node; deps: NodeDependency[] };
 
 export interface RxValue<Value> {
-  type: "scalar";
+  type: "rx_value";
 
   register<Node extends RxValueNode>(initNode: (_: Value) => Node): Node;
   unregister(node: RxValueNode): void;

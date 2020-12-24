@@ -14,7 +14,7 @@ export class RxZippedValue<
   InputTuple extends ReadonlyArray<unknown>,
   ZippedValue
 > implements RxValue<ZippedValue> {
-  type: "scalar" = "scalar";
+  type: "rx_value" = "rx_value";
 
   // The nodes in the update graph that we created
   // to control each input value.
