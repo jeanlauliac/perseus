@@ -5,7 +5,6 @@ import {
   RxMutValue,
   if_,
   map,
-  zip,
   RxValue,
 } from "./perseus/index";
 
@@ -56,6 +55,7 @@ const TaskRow = ({
     newName.set(task.name.value);
     return (
       <input
+        style={{ fontSize: "26px", flex: "1", minWidth: "0" }}
         value={newName}
         onChange={(ev: InputEvent) =>
           newName.set((ev.target as HTMLInputElement).value)
@@ -135,7 +135,7 @@ const App = () => {
             task={task}
             onDelete={() => {
               tasks.splice(tasks.indexOf(task), 1);
-              if (editingTask.value === task) editingTask.set(null);
+              editingTask.set(null);
             }}
             onEdit={() => {
               if (editingTask.value !== task) {
